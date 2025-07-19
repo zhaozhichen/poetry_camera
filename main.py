@@ -11,7 +11,7 @@ import RPi.GPIO as GPIO # Import the RPi.GPIO library for button input
 
 # --- Configuration for Gemini API ---
 # IMPORTANT: Replace "YOUR_GEMINI_API_KEY_HERE" with your actual Google Gemini API key!
-API_KEY = "AIzaSyDKRyg7h_eM3ZSyMFQBhdBTKUujpmcg0vE" 
+API_KEY = "YOUR_GEMINI_API_KEY_HERE" 
 
 # Gemini API Endpoint (using gemini-2.5-pro as per poetry_camera_curl.py)
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
