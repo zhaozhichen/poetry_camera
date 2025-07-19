@@ -1,0 +1,4 @@
+picamera
+Pillow
+python-escpos
+RPi.GPIO
