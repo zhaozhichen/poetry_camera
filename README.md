@@ -1,4 +1,4 @@
-Inspired by [https://poetry.camera/](https://poetry.camera/) but totally rewritten from scratch.
+*Inspired by [https://poetry.camera/](https://poetry.camera/) but rewritten from scratch.*
 
 ### Initial Setup
 
