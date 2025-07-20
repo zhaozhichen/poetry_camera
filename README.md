@@ -19,3 +19,8 @@ python -m venv venv
 source venv/bin/activate
 
 pip install -r requirements.txt
+
+
+You have to explicitly run this IN venv:
+
+sudo venv/bin/python3 main.py
