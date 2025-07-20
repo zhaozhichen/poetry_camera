@@ -1,4 +1,5 @@
 *Inspired by [https://poetry.camera/](https://poetry.camera/) but rewritten from scratch.*
+*Thermal printer reference: https://www.adafruit.com/product/1289*
 
 ### Initial Setup
 
