@@ -32,7 +32,7 @@ TIMEOUT = 1.00 # Read timeout in seconds
 DSRDTR = True # Data Set Ready/Data Terminal Ready flow control (often needed for these printers)
 
 # --- Configuration for Button and LED ---
-BUTTON_PIN = 22 # GPIO pin connected to the button (BCM numbering)
+BUTTON_PIN = 23 # GPIO pin connected to the button (BCM numbering)
 LED_PIN = 18    # GPIO pin connected to the button's ring LED (BCM numbering)
 
 # Set up GPIO mode (BCM for GPIO numbers, BOARD for physical pin numbers)
@@ -101,7 +101,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         print(f"Error: Image file not found at {image_path}", file=sys.stderr)
         return None
 
-    if not api_key or api_key == "AIzaSyDKRyg7h_eM3ZSyMFQBhdBTKUujpmcg0vE": # Check for placeholder API key
+    if not api_key or api_key == API_KEY: # Check for placeholder API key
         print("Error: Gemini API Key is not set. Please update the API_KEY variable in the script.", file=sys.stderr)
         return None
 
