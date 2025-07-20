@@ -25,7 +25,8 @@ except FileNotFoundError:
 
 # Gemini API Endpoint
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-POEM_GENERATION_PROMPT = "Write a Haiku about the scene in this picture."
+# POEM_GENERATION_PROMPT = "Write a Haiku about the scene in this picture."
+POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title."
 
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0'
