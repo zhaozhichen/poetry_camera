@@ -101,7 +101,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         print(f"Error: Image file not found at {image_path}", file=sys.stderr)
         return None
 
-    if not api_key or api_key == API_KEY: # Check for placeholder API key
+    if not api_key: # Check for placeholder API key
         print("Error: Gemini API Key is not set. Please update the API_KEY variable in the script.", file=sys.stderr)
         return None
 
