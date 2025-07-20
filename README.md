@@ -1,32 +1,41 @@
-Inspired by https://poetry.camera/ but totally rewrite from scratch.
+Inspired by [https://poetry.camera/](https://poetry.camera/) but totally rewritten from scratch.
 
-Install Bullseye Raspberry Pi OS (not bookworm. which has no legacy camera setting)
+### Initial Setup
 
-sudo raspi-config
+1.  **Install Bullseye Raspberry Pi OS**:
+      * **Note**: Do *not* use Bookworm, as it lacks the legacy camera setting.
+2.  **Enable Legacy Camera**:
+    ```bash
+    sudo raspi-config
+    ```
+    Navigate to `Interface Options` -\> `Legacy Camera` and enable it.
 
-Interface Options -> Legacy Camera
+### Install Dependencies
 
+```bash
 sudo apt update
-
 sudo apt install libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev tcl-dev tk-dev
-
 sudo apt install python3.9-dev
-
 sudo apt install python3-rpi.gpio
+```
 
+### Set Up Python Virtual Environment
+
+```bash
 python -m venv venv
-
 source venv/bin/activate
-
 pip install -r requirements.txt
+```
 
+### Running the Script Manually (within the virtual environment)
 
-You have to explicitly run this IN venv:
+You must explicitly run this **inside** your virtual environment:
 
+```bash
 sudo venv/bin/python3 main.py
+```
 
-
-Follow these steps to auto run scripts upon startup:
+### Auto-run Script on Startup (Systemd Service)
 
 To run your command automatically on Raspberry Pi startup, the most robust and recommended method is to create a **systemd service**. This allows for easy management, automatic restarts if the script crashes, and centralized logging.
 
