@@ -281,7 +281,7 @@ if __name__ == "__main__":
         
         # Add event detection for the button.
         # bouncetime is to prevent multiple triggers from a single press.
-        GPIO.add_event_detect(BUTTON_PIN, GPIO.FALLING, callback=run_poetry_printer, bouncetime=300)
+        GPIO.add_event_detect(BUTTON_PIN, GPIO.FALLING, callback=run_poetry_printer, bouncetime=500)
 
         # Add a loop to continuously print the button state for debugging
         print("Monitoring button state (HIGH = not pressed, LOW = pressed)...")
