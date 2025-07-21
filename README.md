@@ -65,8 +65,8 @@ After=network.target
 ExecStart=/home/pi/projects/poetry_camera/venv/bin/python3 /home/pi/projects/poetry_camera/main.py
 WorkingDirectory=/home/pi/projects/poetry_camera/
 Restart=on-failure
-StandardOutput=journal   # <--- ADD THIS LINE
-StandardError=journal    # <--- ADD THIS LINE
+StandardOutput=journal
+StandardError=journal
 # Optional: If you suspect permission issues for camera/serial port when running as root
 # User=pi
 # Group=pi
