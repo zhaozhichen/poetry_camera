@@ -59,37 +59,19 @@ Copy and paste the entire block below into the `nano` editor.
 ```
 [Unit]
 Description=Poetry Printer Service
-# Start after networking is online and the multi-user target is reached
-After=network-online.target multi-user.target
+After=network.target
 
 [Service]
-# Set the working directory for the script
-WorkingDirectory=/home/pi/projects/poetry_camera/
-
-# The command to execute: directly call the venv's python interpreter
-# and pass the script. Running as User=root bypasses the need for 'sudo' here.
 ExecStart=/home/pi/projects/poetry_camera/venv/bin/python3 /home/pi/projects/poetry_camera/main.py
-
-# Specify the user to run the service as.
-# We use 'root' because your original command used 'sudo', implying root privileges are needed.
-# This ensures access to GPIO, camera, and serial ports.
-User=root
-
-# Redirect standard output and error to the systemd journal for logging
-StandardOutput=journal
-StandardError=journal
-
-# Restart the service if it fails unexpectedly
+WorkingDirectory=/home/pi/projects/poetry_camera/
 Restart=on-failure
-RestartSec=5s # Wait 5 seconds before attempting to restart
-
-# Clean up resources when the service stops
-# Type=simple is default, but for scripts that might detach or fork, other types may be needed.
-# For most Python scripts like this, simple is fine.
-Type=simple
+StandardOutput=journal   # <--- ADD THIS LINE
+StandardError=journal    # <--- ADD THIS LINE
+# Optional: If you suspect permission issues for camera/serial port when running as root
+# User=pi
+# Group=pi
 
 [Install]
-# This unit should be started when the system reaches multi-user runlevel
 WantedBy=multi-user.target
 ```
 
