@@ -11,6 +11,14 @@
     ```
     Navigate to `Interface Options` -\> `Legacy Camera` and enable it.
 
+    Navigate to `Interface Options` -\> P6 Serial Port.
+
+     "Would you like a login shell to be accessible over serial?" -> Select No (IMPORTANT, DON'T CHOOSE Yes)
+
+     "Would you like the serial port hardware to be enabled?" -> Select Yes
+
+
+
 ### Install Dependencies
 
 ```bash
