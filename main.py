@@ -81,7 +81,8 @@ BYTESIZE = 8
 PARITY = 'N' # No parity bit.
 STOPBITS = 1
 TIMEOUT = 1.00 # Read timeout in seconds for serial communication.
-DSRDTR = True # Enable Data Set Ready/Data Terminal Ready flow control (hardware flow control).
+DSRDTR = False # Data Set Ready/Data Terminal Ready flow control
+RTSCTS = False # Request To Send/Clear To Send flow control
 
 # --- Configuration for Button and LED ---
 BUTTON_PIN = 23 # GPIO pin connected to the button (using BCM numbering).
