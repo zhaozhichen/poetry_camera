@@ -11,18 +11,21 @@ import RPi.GPIO as GPIO
 import logging # Import the logging module
 
 # Suppress GPIO warnings about channels already in use.
+# This is safe to do if you are confident in your GPIO setup.
 GPIO.setwarnings(False) 
 
 # --- Configuration for Logging ---
+# Define the path for the main log file
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poetry_printer.log")
-DEBUG_BUTTON_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug_button_press.log")
+
+# Set the logging level (e.g., logging.INFO for general info, logging.DEBUG for more verbose output)
 LOG_LEVEL = logging.INFO 
 
 # Get the root logger
 root_logger = logging.getLogger()
 root_logger.setLevel(LOG_LEVEL)
 
-# Clear any existing handlers to prevent duplicate output
+# Clear any existing handlers to prevent duplicate output (important for service restarts)
 if root_logger.hasHandlers():
     root_logger.handlers.clear()
 
@@ -39,17 +42,12 @@ stream_handler = logging.StreamHandler(sys.stdout)
 stream_handler.setFormatter(formatter)
 root_logger.addHandler(stream_handler)
 
-# Suppress PIL (Pillow) library's INFO messages
+# Suppress PIL (Pillow) library's INFO messages if they are too noisy,
+# as they are often not relevant for application-level debugging.
 logging.getLogger('PIL').setLevel(logging.WARNING)
 
-# --- ADDED FOR DEBUGGING: Log the resolved paths of the log files at script startup ---
+# --- Log the resolved path of the main log file at script startup ---
 logging.info(f"Script started. Expected poetry_printer.log path: {LOG_FILE}")
-logging.info(f"Expected debug_button_press.log path: {DEBUG_BUTTON_LOG}")
-
-
-# --- ADDED FOR DEBUGGING: Log the resolved paths of the log files at script startup ---
-logging.info(f"Script started. Expected poetry_printer.log path: {LOG_FILE}")
-logging.info(f"Expected debug_button_press.log path: {DEBUG_BUTTON_LOG}")
 
 
 # --- Configuration for Gemini API ---
@@ -77,12 +75,17 @@ POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem abo
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0' # Default serial port on Raspberry Pi for many thermal printers.
 BAUD_RATE = 9600
+
+# Common Serial Port Settings (adjust if your printer's manual says otherwise)
 BYTESIZE = 8
 PARITY = 'N' # No parity bit.
 STOPBITS = 1
 TIMEOUT = 1.00 # Read timeout in seconds for serial communication.
+
+# Flow Control: Set to False as per successful test_printer.py
 DSRDTR = False # Data Set Ready/Data Terminal Ready flow control
 RTSCTS = False # Request To Send/Clear To Send flow control
+
 
 # --- Configuration for Button and LED ---
 BUTTON_PIN = 23 # GPIO pin connected to the button (using BCM numbering).
@@ -98,7 +101,7 @@ GPIO.setup(LED_PIN, GPIO.OUT)
 
 # --- Global variable for software debounce ---
 last_poetry_action_time = 0
-COOLDOWN_TIME_SECONDS = 15 # Cooldown period to prevent multiple triggers from a single physical button press.
+COOLDOWN_TIME_SECONDS = 15 # Cooldown period to prevent multiple triggers from a single button press.
 
 # --- Function to Take a Picture ---
 def take_picture(filename="image.jpg"):
@@ -239,6 +242,9 @@ def print_poem_on_thermal_printer(poem_text):
         logging.warning("No poem text to print.")
         return
     try:
+        logging.info("Adding a small delay before attempting to open serial port...")
+        time.sleep(2) # Give the serial port a moment to be fully ready
+
         # Initialize serial printer connection with specified parameters.
         p = Serial(
             devfile=SERIAL_PORT,
@@ -247,7 +253,8 @@ def print_poem_on_thermal_printer(poem_text):
             parity=PARITY,
             stopbits=STOPBITS,
             timeout=TIMEOUT,
-            dsrdtr=DSRDTR
+            dsrdtr=DSRDTR, # Now False
+            rtscts=RTSCTS  # Now False
         )
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
         
@@ -288,41 +295,30 @@ def run_poetry_printer(channel):
     This function is registered as a callback for the button press event.
     It orchestrates the entire process: taking a photo, generating a poem, and printing it.
     """
-    # --- ADDED FOR DEBUGGING: Wrap the entire function content in a try-except block ---
+    # --- Wrap the entire function content in a try-except block ---
     # This catches any unhandled exceptions within the callback and logs them.
     try:
-        # --- ADDED FOR DEBUGGING: Log entry point of the function ---
+        # --- Log entry point of the function ---
         logging.info(f"--- run_poetry_printer entered for channel {channel} ---")
-
-        # --- ADDED FOR DEBUGGING: Direct file write to confirm execution and permissions ---
-        # This is a low-level check to ensure file writing is possible from this context.
-        try:
-            # Use the pre-resolved path for debug_button_press.log
-            with open(DEBUG_BUTTON_LOG, "a") as f:
-                f.write(f"Button pressed at {time.ctime()} for channel {channel}\n")
-        except Exception as e:
-            logging.error(f"Failed to write to debug_button_press.log: {e}")
-        # --- END DEBUGGING ADDITION ---
 
         global last_poetry_action_time
         current_time = time.time()
 
-        # --- SOFTWARE DEBOUNCE LOGIC (TEMPORARILY COMMENTED OUT FOR TESTING) ---
-        # This logic helps prevent multiple triggers from a single, slightly bouncy button press.
-        # Uncomment these lines once debugging is complete and you want debounce active.
-        # if (current_time - last_poetry_action_time) < COOLDOWN_TIME_SECONDS:
-        #     logging.debug(f"Button press ignored due to cooldown. Time elapsed: {current_time - last_poetry_action_time:.2f}s (Min {COOLDOWN_TIME_SECONDS}s needed)")
-        #     return
+        # --- SOFTWARE DEBOUNCE LOGIC ---
+        # This prevents multiple triggers from a single, slightly bouncy button press.
+        if (current_time - last_poetry_action_time) < COOLDOWN_TIME_SECONDS:
+            logging.debug(f"Button press ignored due to cooldown. Time elapsed: {current_time - last_poetry_action_time:.2f}s (Min {COOLDOWN_TIME_SECONDS}s needed)")
+            return
         
-        # # Check current actual state of the button pin RIGHT NOW before proceeding.
-        # # This helps filter out false triggers if the button state isn't truly LOW.
-        # if GPIO.input(channel) == GPIO.HIGH: # If it's HIGH, it's not actually pressed (assuming PUD_UP).
-        #     logging.debug(f"Callback triggered for GPIO {channel} but pin is currently HIGH. Ignoring false trigger.")
-        #     return
+        # Check current actual state of the button pin RIGHT NOW before proceeding.
+        # This helps filter out false triggers if the button state isn't truly LOW.
+        if GPIO.input(channel) == GPIO.HIGH: # If it's HIGH, it's not actually pressed (assuming PUD_UP).
+            logging.debug(f"Callback triggered for GPIO {channel} but pin is currently HIGH. Ignoring false trigger.")
+            return
 
         # If we get here, the press is considered valid, so update the last action time.
         last_poetry_action_time = current_time
-        # --- END SOFTWARE DEBOUNCE LOGIC (TEMPORARILY DISABLED) ---
+        # --- END SOFTWARE DEBOUNCE LOGIC ---
 
         logging.info(f"Callback triggered for GPIO {channel}! Initiating poetry process.")
         # Turn off LED while processing to indicate a busy state.
