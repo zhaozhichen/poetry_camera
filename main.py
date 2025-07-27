@@ -305,20 +305,22 @@ def run_poetry_printer(channel):
         current_time = time.time()
 
         # --- SOFTWARE DEBOUNCE LOGIC ---
-        # This prevents multiple triggers from a single, slightly bouncy button press.
+        # 1. Check actual pin state: Filter out false triggers (e.g., on button release or noise)
+        #    If the button is currently HIGH (not pressed, assuming PUD_UP), ignore this trigger.
+        if GPIO.input(channel) == GPIO.HIGH:
+            logging.debug(f"Callback triggered for GPIO {channel} but pin is currently HIGH. Ignoring false trigger.")
+            return
+
+        # 2. Cooldown check: Prevent rapid *intentional* presses within the cooldown period.
+        #    This also catches any bounces that might slip past the bouncetime if they are
+        #    still within the cooldown.
         if (current_time - last_poetry_action_time) < COOLDOWN_TIME_SECONDS:
             logging.debug(f"Button press ignored due to cooldown. Time elapsed: {current_time - last_poetry_action_time:.2f}s (Min {COOLDOWN_TIME_SECONDS}s needed)")
             return
         
-        # Check current actual state of the button pin RIGHT NOW before proceeding.
-        # This helps filter out false triggers if the button state isn't truly LOW.
-        if GPIO.input(channel) == GPIO.HIGH: # If it's HIGH, it's not actually pressed (assuming PUD_UP).
-            logging.debug(f"Callback triggered for GPIO {channel} but pin is currently HIGH. Ignoring false trigger.")
-            return
-
-        # If we get here, the press is considered valid, so update the last action time.
+        # If we reach here, the press is considered valid, so update the last action time.
         last_poetry_action_time = current_time
-        # --- END SOFTWARE DEBOUNCE LOGIC ---
+        # --- END REVISED SOFTWARE DEBOUNCE LOGIC ---
 
         logging.info(f"Callback triggered for GPIO {channel}! Initiating poetry process.")
         # Turn off LED while processing to indicate a busy state.
