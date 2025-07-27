@@ -65,7 +65,7 @@ After=network-online.target graphical.target
 [Service]
 ExecStart=/home/pi/projects/poetry_camera/venv/bin/python3 /home/pi/projects/poetry_camera/main.py
 WorkingDirectory=/home/pi/projects/poetry_camera/
-Restart=on-failure
+Restart=always
 StandardOutput=journal
 StandardError=journal
 # Optional: If you suspect permission issues for camera/serial port when running as root
