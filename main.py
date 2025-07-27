@@ -70,7 +70,7 @@ except FileNotFoundError:
 # Gemini API Endpoint URL for content generation.
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 # Prompt string for instructing Gemini to generate a poem based on an image.
-POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title. Once done, translate the peom into Chinese. "
+POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title, adorned with three tildes (~~~ ) on each side. Add a single empty line after the title. Once done, translate the poem into Chinese, directly following the English version after a single empty line, and also adorn the Chinese title with three tildes (~~~ ) on each side, followed by a single empty line before the Chinese poem body."
 
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0' # Default serial port on Raspberry Pi for many thermal printers.
