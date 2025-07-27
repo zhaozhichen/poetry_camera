@@ -12,14 +12,14 @@ import logging # Import the logging module
 
 # Suppress GPIO warnings about channels already in use.
 # This is safe to do if you are confident in your GPIO setup.
-GPIO.setwarnings(False) 
+GPIO.setwarnings(False)
 
 # --- Configuration for Logging ---
 # Define the path for the main log file
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poetry_printer.log")
 
 # Set the logging level (e.g., logging.INFO for general info, logging.DEBUG for more verbose output)
-LOG_LEVEL = logging.INFO 
+LOG_LEVEL = logging.INFO
 
 # Get the root logger
 root_logger = logging.getLogger()
@@ -114,13 +114,13 @@ def take_picture(filename="image.jpg"):
             logging.info("Camera warming up...")
             time.sleep(1) # Give camera time to warm up and adjust exposure/white balance.
             camera.resolution = (2592, 1944) # Set the desired camera resolution.
-            
+
             # Determine the current script's directory and create a 'pictures' subdirectory
             # to store captured images.
             current_dir = os.path.dirname(os.path.abspath(__file__))
             save_dir = os.path.join(current_dir, "pictures")
             os.makedirs(save_dir, exist_ok=True) # Create the directory if it doesn't exist.
-            
+
             filepath = os.path.join(save_dir, filename)
             logging.info(f"Taking picture and saving to: {filepath}")
             camera.capture(filepath) # Capture the image and save it to the specified path.
@@ -151,7 +151,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         logging.info(f"Reading image and encoding for Gemini...")
         with open(image_path, "rb") as image_file:
             encoded_image = base64.b64encode(image_file.read()).decode('utf-8') # Encode image to base64 string.
-        
+
         # Construct the JSON payload required by the Gemini API for image and text input.
         payload = {
             "contents": [
@@ -168,7 +168,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                 }
             ]
         }
-        
+
         # Construct the curl command as a list of arguments.
         curl_command = [
             "curl",
@@ -178,7 +178,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
             f"{GEMINI_API_URL}?key={api_key}" # Append the API key to the endpoint URL.
         ]
         logging.info(f"Sending request to Gemini via curl...")
-        
+
         # Execute the curl command as a subprocess.
         process = subprocess.run(
             curl_command,
@@ -187,9 +187,9 @@ def generate_poem_from_image_via_curl(image_path, api_key):
             text=True,                 # Decode stdout/stderr as text (UTF-8 by default).
             check=True                 # Raise a CalledProcessError if curl returns a non-zero exit code.
         )
-        
+
         response_json = json.loads(process.stdout) # Parse the JSON response from Gemini.
-        
+
         # Extract the generated poem from the API response structure.
         if 'candidates' in response_json and response_json['candidates']:
             first_candidate = response_json['candidates'][0]
@@ -211,7 +211,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
             # Log specific API errors returned by Gemini.
             logging.error(f"API Error: {response_json['error']['message']}")
             return None
-        
+
         # Log if the expected poem content was not found in the response or if the format was unexpected.
         logging.error("Error: Could not find poem in Gemini response or unexpected response format.")
         logging.error(f"Full response: {response_json}")
@@ -254,23 +254,27 @@ def print_poem_on_thermal_printer(poem_text):
             stopbits=STOPBITS,
             timeout=TIMEOUT,
             dsrdtr=DSRDTR, # Now False
-            rtscts=RTSCTS  # Now False
+            rtscts=RTSCTS,  # Now False
+            # --- IMPORTANT CHANGE: Add encoding for Chinese support ---
+            encoding='CP936' # 'CP936' covers GBK/GB2312 for Simplified Chinese.
+                             # This encoding also handles standard ASCII English characters.
         )
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
-        
+
         # Set printer alignment and font for the header.
         p.set(align='center', font='b', height=1, width=1)
-        
-        # Set alignment for the main poem text.
-        p.set(align='left', font='a', height=1, width=1)
-        # Print each line of the poem.
+
+        # Poem title might be here, if returned by Gemini with a title.
+        # Ensure the entire poem_text is handled for both English and Chinese.
+        # The 'encoding' parameter in the Serial constructor handles this for all subsequent text() calls.
         for line in poem_text.split('\n'):
             p.text(line + '\n')
-        
+
         # Add a footer text.
         p.text("\n----------------------\n")
         p.set(align='center')
-        # p.text("Generated by Gemini on Raspberry Pi\n")
+        p.text("Generated by Gemini on Raspberry Pi\n") # This line will also use CP936 encoding
+        p.text("（老赵的脚印）\n") # Example Chinese line in footer for testing
         p.cut() # Send command to cut the paper.
         logging.info("Poem printed successfully!")
     except Exception as e:
@@ -278,6 +282,7 @@ def print_poem_on_thermal_printer(poem_text):
         logging.error(f"Error printing poem: {e}")
         logging.error("Please ensure the printer is connected, powered on, and you have the correct serial port and baud rate.")
         logging.error("On Linux (Raspberry Pi), you might need to add your user to the 'dialout' group or run the script with sudo for serial port access.")
+        logging.error("If Chinese characters are not printing correctly, double-check your printer's manual for supported code pages and ensure it has Chinese font ROM.")
     finally:
         # Ensure the printer connection is closed, even if errors occurred during printing.
         if 'p' in locals() and p: # Check if 'p' (printer object) was successfully created.
@@ -315,7 +320,7 @@ def run_poetry_printer(channel):
         if (current_time - last_poetry_action_time) < COOLDOWN_TIME_SECONDS:
             logging.debug(f"Button press ignored due to cooldown. Time elapsed: {current_time - last_poetry_action_time:.2f}s (Min {COOLDOWN_TIME_SECONDS}s needed)")
             return
-        
+
         # If we reach here, the press is considered valid, so update the last action time.
         last_poetry_action_time = current_time
         # --- END REVISED SOFTWARE DEBOUNCE LOGIC ---
@@ -326,13 +331,13 @@ def run_poetry_printer(channel):
 
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         picture_name = f"poetry_picture_{timestamp}.jpg"
-        
+
         # 1. Take the picture.
         captured_filepath = take_picture(picture_name)
 
         if captured_filepath:
             # 2. If picture was taken successfully, generate a poem using Gemini.
-            poem = generate_poem_from_image_via_curl(captured_filepath, API_KEY)    
+            poem = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
 
             if poem:
                 # 3. If poem was generated successfully, print it.
@@ -341,7 +346,7 @@ def run_poetry_printer(channel):
                 logging.error("Poem generation failed, cannot print.")
         else:
             logging.error("Failed to capture picture, so cannot generate or print a poem.")
-            
+
         # Turn LED back on after processing is complete.
         GPIO.output(LED_PIN, GPIO.HIGH)
         # Log the ready message again at the end of the process.
@@ -361,7 +366,7 @@ if __name__ == "__main__":
         # Initial setup: turn on the LED and log the ready message.
         GPIO.output(LED_PIN, GPIO.HIGH)
         logging.info(f"Poetry Printer ready! Button LED is ON. Press the button connected to GPIO {BUTTON_PIN} to start.")
-        
+
         # Add event detection for the button press on the falling edge (button pressed).
         # bouncetime helps prevent multiple triggers from a single physical press.
         GPIO.add_event_detect(BUTTON_PIN, GPIO.FALLING, callback=run_poetry_printer, bouncetime=300)
@@ -370,12 +375,12 @@ if __name__ == "__main__":
         # Keep the script running indefinitely in a loop to monitor button presses.
         while True:
             current_button_state = GPIO.input(BUTTON_PIN)
-            
+
             # Log button state changes (for console/journalctl) for debugging purposes.
             if current_button_state != last_displayed_button_state:
                 logging.debug(f"Button state: {'LOW (Pressed)' if current_button_state == GPIO.LOW else 'HIGH (Not Pressed)'}")
                 last_displayed_button_state = current_button_state
-            
+
             time.sleep(0.1) # Short delay to prevent excessive CPU usage in the loop.
 
     except KeyboardInterrupt:
