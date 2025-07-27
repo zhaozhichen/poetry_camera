@@ -70,7 +70,8 @@ except FileNotFoundError:
 # Gemini API Endpoint URL for content generation.
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 # Prompt string for instructing Gemini to generate a poem based on an image.
-POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title, adorned with three tildes (~~~ ) on each side. Add a single empty line after the title. Once done, translate the poem into Chinese, directly following the English version after a single empty line, and also adorn the Chinese title with three tildes (~~~ ) on each side, followed by a single empty line before the Chinese poem body."
+POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title, adorned with three tildes (~~~ ) on each side. Add a single empty line after the title."
+# POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title, adorned with three tildes (~~~ ) on each side. Add a single empty line after the title. Once done, translate the poem into Chinese, directly following the English version after a single empty line, and also adorn the Chinese title with three tildes (~~~ ) on each side, followed by a single empty line before the Chinese poem body."
 
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0' # Default serial port on Raspberry Pi for many thermal printers.
@@ -272,8 +273,8 @@ def print_poem_on_thermal_printer(poem_text):
 
         # Add a footer text.
         p.text("\n----------------------\n")
-        p.set(align='center')
-        p.text("（老赵的脚印）\n") # Example Chinese line in footer for testing
+        # p.set(align='center')
+        # p.text("（老赵的脚印）\n") # Example Chinese line in footer for testing
         p.cut() # Send command to cut the paper.
         logging.info("Poem printed successfully!")
     except Exception as e:
