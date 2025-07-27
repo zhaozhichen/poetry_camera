@@ -33,7 +33,10 @@ def test_serial_printer_connection():
             stopbits=STOPBITS,
             timeout=TIMEOUT,
             dsrdtr=DSRDTR,
-            rtscts=RTSCTS # Explicitly set RTS/CTS
+            rtscts=RTSCTS, # Explicitly set RTS/CTS
+            # --- IMPORTANT: Specify the encoding here for Chinese support ---
+            encoding='CP936' # 'CP936' covers GBK/GB2312 for Simplified Chinese.
+                             # This encoding also handles standard ASCII English characters.
         )
 
         print("Connection successful! Sending test print...")
@@ -42,8 +45,18 @@ def test_serial_printer_connection():
         p.set(align='center', font='b') # Centered, bold
         p.text("--- Test Print ---\n")
         p.set(align='left', font='a') # Left-aligned, normal font
+
+        # English Text
         p.text("Hello from Raspberry Pi!\n")
+        p.text("This is an English test line.\n")
         p.text(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        # Chinese Text
+        p.text("\n") # Add a newline for separation
+        p.text("你好，世界！ (Hello, World!)\n")
+        p.text("这是一个中文测试。\n") # This is a Chinese test.
+        p.text("多语言打印示例。\n") # Multi-language printing example.
+
         p.text("--------------------\n")
         p.cut()
 
@@ -56,6 +69,7 @@ def test_serial_printer_connection():
         print(f"- Verify ALL printer settings (baud rate, data bits, parity, stop bits, flow control).", file=sys.stderr)
         print(f"- Check serial port permissions (e.g., add user to 'dialout' group or run with sudo).", file=sys.stderr)
         print(f"- Check wiring (TX/RX lines).", file=sys.stderr)
+        print(f"- ***Crucially for Chinese: Ensure your printer supports Chinese characters and the correct code page/encoding is used!*** If 'CP936' doesn't work, consult your printer manual for supported character sets and try the corresponding Python encoding name (e.g., 'gb18030', 'big5').", file=sys.stderr)
 
     finally:
         if p:
