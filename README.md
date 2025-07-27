@@ -59,7 +59,8 @@ Copy and paste the entire block below into the `nano` editor.
 ```
 [Unit]
 Description=Poetry Printer Service
-After=network.target
+Wants=network-online.target
+After=network-online.target graphical.target
 
 [Service]
 ExecStart=/home/pi/projects/poetry_camera/venv/bin/python3 /home/pi/projects/poetry_camera/main.py
