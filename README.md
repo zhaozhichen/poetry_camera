@@ -68,9 +68,8 @@ WorkingDirectory=/home/pi/projects/poetry_camera/
 Restart=always
 StandardOutput=journal
 StandardError=journal
-# Optional: If you suspect permission issues for camera/serial port when running as root
-# User=pi
-# Group=pi
+User=pi
+Group=pi
 
 [Install]
 WantedBy=multi-user.target
