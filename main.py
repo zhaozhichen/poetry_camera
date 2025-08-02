@@ -264,7 +264,7 @@ def print_poem_on_thermal_printer(poem_text):
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
 
         # Set printer alignment and font for the header.
-        p.set(align='center', font='b', height=1, width=1)
+        p.set(align='center', font='a', height=1, width=1)
 
         # Poem title might be here, if returned by Gemini with a title.
         # Ensure the entire poem_text is handled for both English and Chinese.
