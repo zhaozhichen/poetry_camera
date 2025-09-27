@@ -203,7 +203,23 @@ The setup depends on which stack your image uses:
 
 ---
 
-# Set up hotspot connection
+### Usage
+
+Once the service is running and the LED on your button is lit, the Poetry Printer is ready:
+
+1.  **Press the button once.**
+2.  The LED will turn off, indicating processing.
+3.  The camera will take a picture.
+4.  The script will send the image to the Gemini API.
+5.  A poem will be generated and printed on your thermal printer.
+6.  The LED will turn back on, indicating readiness for the next poem.
+
+The debounce logic is configured to ensure that one physical button press results in one poem being printed, even if the button has some electrical "bounce." There might be a slight delay for the very first press after a fresh boot as the system settles, but subsequent presses should be reliable.
+
+```
+```
+
+# Append: Set up hotspot connection
 
 ## 🔎 Step 1: Check which you’re running
 
@@ -231,7 +247,7 @@ Most new Raspberry Pi OS releases now use **NetworkManager by default**.
 With NetworkManager, you don’t touch `wpa_supplicant.conf` anymore. You do:
 
 ```bash
-nmcli dev wifi connect "MyPhoneHotspot" password "mypassword123"
+sudo nmcli dev wifi connect "MyPhoneHotspot" password "mypassword123"
 ```
 
 That will create a saved connection profile automatically.
@@ -251,8 +267,8 @@ nmcli connection show
 Then set priority. For example:
 
 ```bash
-nmcli connection modify "HomeWiFi" connection.autoconnect-priority 20
-nmcli connection modify "MyPhoneHotspot" connection.autoconnect-priority 10
+sudo nmcli connection modify "HomeWiFi" connection.autoconnect-priority 20
+sudo nmcli connection modify "MyPhoneHotspot" connection.autoconnect-priority 10
 ```
 
 This means:
@@ -276,25 +292,3 @@ or just reboot.
 
 * At home → Pi auto-connects to HomeWiFi.
 * Outside → Pi scans, finds your phone hotspot, and auto-connects.
-
----
-
-Do you want me to write you a **ready-to-run script** that will automatically switch to your hotspot if home Wi-Fi goes down (useful if you tether intermittently)?
-
-
-### Usage
-
-Once the service is running and the LED on your button is lit, the Poetry Printer is ready:
-
-1.  **Press the button once.**
-2.  The LED will turn off, indicating processing.
-3.  The camera will take a picture.
-4.  The script will send the image to the Gemini API.
-5.  A poem will be generated and printed on your thermal printer.
-6.  The LED will turn back on, indicating readiness for the next poem.
-
-The debounce logic is configured to ensure that one physical button press results in one poem being printed, even if the button has some electrical "bounce." There might be a slight delay for the very first press after a fresh boot as the system settles, but subsequent presses should be reliable.
-
-```
-```
-
