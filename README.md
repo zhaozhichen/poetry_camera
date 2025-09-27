@@ -197,6 +197,91 @@ Additionally, your script writes detailed logs to a file:
 tail -f /home/pi/projects/poetry_camera/poetry_printer.log
 ```
 
+Ah, thanks for clarifying — if you’re on a **modern Raspberry Pi OS (Bookworm or newer)**, the default network manager is **`systemd-networkd` + `systemd-resolved`** or **NetworkManager**, not `wpa_supplicant`.
+
+The setup depends on which stack your image uses:
+
+---
+
+# Set up hotspot connection
+
+## 🔎 Step 1: Check which you’re running
+
+Run:
+
+```bash
+networkctl
+```
+
+If you see interfaces managed by `systemd-networkd`, then you’re using that.
+Or check:
+
+```bash
+nmcli dev status
+```
+
+If it shows your Wi-Fi device (`wlan0`) under NetworkManager, then you’re using **NetworkManager**.
+
+Most new Raspberry Pi OS releases now use **NetworkManager by default**.
+
+---
+
+## 📡 Step 2: Add your phone hotspot in NetworkManager
+
+With NetworkManager, you don’t touch `wpa_supplicant.conf` anymore. You do:
+
+```bash
+nmcli dev wifi connect "MyPhoneHotspot" password "mypassword123"
+```
+
+That will create a saved connection profile automatically.
+
+---
+
+## 📊 Step 3: Set priority
+
+Each connection profile can have a **priority**. Higher = more preferred.
+
+List your connections:
+
+```bash
+nmcli connection show
+```
+
+Then set priority. For example:
+
+```bash
+nmcli connection modify "HomeWiFi" connection.autoconnect-priority 20
+nmcli connection modify "MyPhoneHotspot" connection.autoconnect-priority 10
+```
+
+This means:
+
+* At home, Pi uses HomeWiFi first.
+* If no known Wi-Fi is available, it will fall back to your hotspot.
+
+---
+
+## 🔄 Step 4: Restart NetworkManager
+
+```bash
+sudo systemctl restart NetworkManager
+```
+
+or just reboot.
+
+---
+
+## ✅ Result
+
+* At home → Pi auto-connects to HomeWiFi.
+* Outside → Pi scans, finds your phone hotspot, and auto-connects.
+
+---
+
+Do you want me to write you a **ready-to-run script** that will automatically switch to your hotspot if home Wi-Fi goes down (useful if you tether intermittently)?
+
+
 ### Usage
 
 Once the service is running and the LED on your button is lit, the Poetry Printer is ready:
@@ -212,3 +297,4 @@ The debounce logic is configured to ensure that one physical button press result
 
 ```
 ```
+
