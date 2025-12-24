@@ -68,12 +68,25 @@ except FileNotFoundError:
     sys.exit(1) # Exit the script if this critical file is missing.
 
 # Gemini API Endpoint URL for content generation.
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
 # Prompt string for instructing Gemini to generate a poem based on an image.
-POEM_GENERATION_PROMPT = "Write a short, descriptive, elegant, humorous poem about the scene in this picture. Start the poem with a title, adorned with three tildes (~~~ ) on each side. Add a single empty line after the title."
+POEM_GENERATION_PROMPT = (
+    "First, carefully analyze the environment, theme, background, and atmosphere of the picture. "
+    "Based on this visual analysis, write a short, descriptive, elegant, and humorous poem in English. "
+    "Ensure the poem's style and imagery deeply resonate with the specific mood of the scene. "
+    "Start the poem with a title, adorned with three tildes (~~~ ) on each side. "
+    "Add a single empty line after the title."
+)
 # Comment this line out if you don't want Chinese translation.
-POEM_GENERATION_PROMPT += "Once done, translate the poem into Chinese, directly following the English version after a single empty line, and also adorn the Chinese title with three tildes (~~~ ) on each side, followed by a single empty line before the Chinese poem body."
-
+POEM_GENERATION_PROMPT += (
+    "\n\nNext, compose an ORIGINAL poem in Chinese about the same scene. "
+    "IMPORTANT: Do not translate the English poem. Instead, create a distinct piece that captures "
+    "the image's spirit using imagery and phrasing natural to Chinese poetic expression. "
+    "The Chinese poem should also closely reflect the photo's unique atmosphere. "
+    "Place this directly following the English version after a single empty line, "
+    "and also adorn the Chinese title with three tildes (~~~ ) on each side, "
+    "followed by a single empty line before the Chinese poem body."
+)
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0' # Default serial port on Raspberry Pi for many thermal printers.
 BAUD_RATE = 9600
