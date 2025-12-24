@@ -9,6 +9,14 @@ from PIL import Image
 from escpos.printer import Serial
 import RPi.GPIO as GPIO
 import logging # Import the logging module
+import requests  # Added for web app upload
+
+# Try to load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, will read .env manually if needed
 
 # Suppress GPIO warnings about channels already in use.
 # This is safe to do if you are confident in your GPIO setup.
@@ -50,22 +58,50 @@ logging.getLogger('PIL').setLevel(logging.WARNING)
 logging.info(f"Script started. Expected poetry_printer.log path: {LOG_FILE}")
 
 
-# --- Configuration for Gemini API ---
-# API Key will be read from a hidden file for security reasons.
-API_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".api_key")
-API_KEY = None # Initialize API_KEY to None
+# --- Configuration Loading from .env file ---
+ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
-try:
-    # Attempt to open and read the API key from the hidden file.
-    with open(API_KEY_FILE, 'r') as f:
-        API_KEY = f.readline().strip() # Read the first line and remove whitespace/newline characters.
-    if not API_KEY:
-        # Log a warning if the API key file is empty.
-        logging.warning(f"Warning: .api_key file is empty. Please ensure your Gemini API key is in {API_KEY_FILE}")
-except FileNotFoundError:
-    # Log an error and exit if the API key file is not found.
-    logging.error(f"Error: .api_key file not found at {API_KEY_FILE}. Please create it and add your Gemini API key.")
-    sys.exit(1) # Exit the script if this critical file is missing.
+def load_env_file():
+    """Load environment variables from .env file manually if python-dotenv is not available"""
+    env_vars = {}
+    if os.path.exists(ENV_FILE):
+        try:
+            with open(ENV_FILE, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        key = key.strip()
+                        value = value.strip().strip('"').strip("'")
+                        env_vars[key] = value
+        except Exception as e:
+            logging.warning(f"Error reading .env file: {e}")
+    return env_vars
+
+# Load .env file manually if python-dotenv didn't load it
+if 'dotenv' not in sys.modules:
+    env_vars = load_env_file()
+    for key, value in env_vars.items():
+        os.environ[key] = value
+
+# --- Configuration for Gemini API ---
+# API Key will be read from .env file (GEMINI_API_KEY) or fallback to .api_key file
+API_KEY = os.getenv('GEMINI_API_KEY')
+
+# Fallback to .api_key file if not in .env
+if not API_KEY:
+    API_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".api_key")
+    try:
+        with open(API_KEY_FILE, 'r') as f:
+            API_KEY = f.readline().strip()
+        if API_KEY:
+            logging.info("Loaded Gemini API key from .api_key file (fallback)")
+    except FileNotFoundError:
+        pass
+
+if not API_KEY:
+    logging.error(f"Error: GEMINI_API_KEY not found in .env file or .api_key file. Please set GEMINI_API_KEY in .env file.")
+    sys.exit(1) # Exit the script if this critical key is missing.
 
 # Gemini API Endpoint URL for content generation.
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
@@ -87,6 +123,26 @@ POEM_GENERATION_PROMPT += (
     "and also adorn the Chinese title with three tildes (~~~ ) on each side, "
     "followed by a single empty line before the Chinese poem body."
 )
+
+# --- Configuration for Web App Upload ---
+# Read from .env file
+WEB_APP_URL = os.getenv('WEB_APP_URL', 'https://poetry.ktizo.io')  # Default URL
+WEB_APP_API_KEY = os.getenv('WEB_APP_API_KEY')
+
+# Fallback to old file-based config if not in .env
+if not WEB_APP_API_KEY:
+    WEB_APP_API_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".web_app_api_key")
+    try:
+        with open(WEB_APP_API_KEY_FILE, 'r') as f:
+            WEB_APP_API_KEY = f.readline().strip()
+        if WEB_APP_API_KEY:
+            logging.info("Loaded Web App API key from .web_app_api_key file (fallback)")
+    except FileNotFoundError:
+        pass
+
+if not WEB_APP_API_KEY:
+    logging.warning("Warning: WEB_APP_API_KEY not found in .env file. Web app upload will be skipped.")
+
 # --- Configuration for Thermal Printer ---
 SERIAL_PORT = '/dev/serial0' # Default serial port on Raspberry Pi for many thermal printers.
 BAUD_RATE = 9600
@@ -247,6 +303,69 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         logging.error(f"An unexpected error occurred during Gemini API call: {e}")
         return None
 
+# --- Function to Upload Poem to Web App ---
+def upload_poem_to_webapp(image_path, poem_text):
+    """
+    上传照片和诗歌到 Web 应用
+    
+    Args:
+        image_path: 照片文件路径
+        poem_text: 生成的诗歌文本
+    
+    Returns:
+        bool: 上传成功返回 True，失败返回 False
+    """
+    if not WEB_APP_API_KEY:
+        logging.warning("Web app API key not configured. Skipping upload.")
+        return False
+    
+    if not os.path.exists(image_path):
+        logging.error(f"Error: Image file not found at {image_path}")
+        return False
+    
+    try:
+        logging.info("Uploading poem to web app...")
+        
+        # 读取图片并转换为 base64
+        with open(image_path, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+        
+        # 准备请求数据
+        payload = {
+            "poem": poem_text,
+            "image": image_data
+        }
+        
+        # 发送 POST 请求
+        headers = {
+            "X-API-Key": WEB_APP_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(
+            f"{WEB_APP_URL}/api/upload",
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 201:
+            logging.info("Poem uploaded successfully to web app!")
+            return True
+        else:
+            logging.error(f"Failed to upload poem: {response.status_code} - {response.text}")
+            return False
+    
+    except requests.exceptions.Timeout:
+        logging.error("Timeout while uploading to web app. The server may be slow or unreachable.")
+        return False
+    except requests.exceptions.ConnectionError:
+        logging.error("Connection error while uploading to web app. Check your internet connection.")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error uploading to web app: {str(e)}")
+        return False
+
 # --- Function to Print Poem on Thermal Printer ---
 def print_poem_on_thermal_printer(poem_text):
     """
@@ -356,6 +475,12 @@ def run_poetry_printer(channel):
             if poem:
                 # 3. If poem was generated successfully, print it.
                 print_poem_on_thermal_printer(poem)
+                
+                # 4. Upload to web app (if configured)
+                if WEB_APP_API_KEY:
+                    upload_poem_to_webapp(captured_filepath, poem)
+                else:
+                    logging.info("Web app upload skipped (API key not configured)")
             else:
                 logging.error("Poem generation failed, cannot print.")
         else:
@@ -380,6 +505,13 @@ if __name__ == "__main__":
         # Initial setup: turn on the LED and log the ready message.
         GPIO.output(LED_PIN, GPIO.HIGH)
         logging.info(f"Poetry Printer ready! Button LED is ON. Press the button connected to GPIO {BUTTON_PIN} to start.")
+        
+        # Log configuration status
+        logging.info(f"Gemini API key: {'Configured' if API_KEY else 'Not configured'}")
+        if WEB_APP_API_KEY:
+            logging.info(f"Web app upload enabled. URL: {WEB_APP_URL}")
+        else:
+            logging.info("Web app upload disabled (WEB_APP_API_KEY not configured in .env)")
 
         # Add event detection for the button press on the falling edge (button pressed).
         # bouncetime helps prevent multiple triggers from a single physical press.
@@ -406,3 +538,4 @@ if __name__ == "__main__":
         GPIO.cleanup() # Release GPIO resources.
         logging.info("GPIO cleaned up.")
         logging.shutdown() # Ensure all buffered log messages are written to file before exiting.
+
