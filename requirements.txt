@@ -1,5 +1,16 @@
+# Poetry Camera Requirements
+# Install with: pip install -r requirements.camera.txt
+
+# Camera and hardware
 picamera
 Pillow
 python-escpos
 RPi.GPIO
 pyserial
+
+# Web app upload (required for upload functionality)
+requests
+
+# Environment variable loading (optional but recommended)
+# If not installed, .env file will be parsed manually
+python-dotenv
