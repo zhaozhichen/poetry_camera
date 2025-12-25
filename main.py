@@ -798,10 +798,8 @@ def run_poetry_printer(channel):
             poem, log_info = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
 
             if poem:
-                # Poem is already logged in generate_poem_from_image_via_curl function
-                # TEMPORARILY SKIP PHYSICAL PRINTING - for debugging style application
-                # print_poem_on_thermal_printer(poem)
-                logging.info("Physical printing temporarily disabled for debugging")
+                # Print the poem
+                print_poem_on_thermal_printer(poem)
                 
                 # 4. Upload to web app (if configured) - this is optional and should not block printing
                 # Even if upload fails, the poem has already been printed successfully
