@@ -106,8 +106,14 @@ if not API_KEY:
 # Gemini API Endpoint URL for content generation.
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
 # Prompt string for instructing Gemini to generate a poem based on an image.
+# Note: Style information will be added separately via build_prompt_with_style()
+# PRIMARY GOAL: Generate high-quality, artistic poetry that deeply captures the essence of the image.
 POEM_GENERATION_PROMPT = (
-    "Write a short, descriptive, elegant, and humorous poem in English based on the image. "
+    "Your primary task is to create a high-quality, artistic poem in English based on the image. "
+    "First, carefully analyze the image's composition, atmosphere, mood, and emotional resonance. "
+    "Then, craft a poem that is: descriptive, elegant, and subtly humorous. "
+    "Use vivid imagery, precise language, and poetic devices (metaphor, alliteration, rhythm) to create depth. "
+    "The poem should capture not just what is seen, but the deeper meaning, emotion, and atmosphere of the scene. "
     "Ensure the poem's style and imagery deeply resonate with the specific mood of the scene. "
     "Start the poem with a title, adorned with three tildes (~~~ ) on each side. "
     "Add a single empty line after the title. "
@@ -115,10 +121,11 @@ POEM_GENERATION_PROMPT = (
 )
 # Comment this line out if you don't want Chinese translation.
 POEM_GENERATION_PROMPT += (
-    "\n\nNext, compose an ORIGINAL poem in Chinese about the same scene. "
-    "IMPORTANT: Do not translate the English poem. Instead, create a distinct piece that captures "
+    "\n\nNext, compose an ORIGINAL, high-quality poem in Chinese about the same scene. "
+    "IMPORTANT: Do not translate the English poem. Instead, create a distinct, independent piece that captures "
     "the image's spirit using imagery and phrasing natural to Chinese poetic expression. "
-    "The Chinese poem should also closely reflect the photo's unique atmosphere. "
+    "The Chinese poem should demonstrate poetic artistry with rich imagery, elegant language, and cultural depth. "
+    "It should also closely reflect the photo's unique atmosphere while standing as a complete work of art on its own. "
     "Place this directly following the English version after a single empty line, "
     "and also adorn the Chinese title with three tildes (~~~ ) on each side, "
     "followed by a single empty line before the Chinese poem body."
@@ -505,11 +512,53 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                         
                         # Add style information at the end if styles were applied
                         if log_info.get('english_style') or log_info.get('chinese_style'):
+                            # Style name mappings: code -> (Chinese name, English code)
+                            english_style_names = {
+                                'classic': ('经典', 'classic'),
+                                'romantic': ('浪漫', 'romantic'),
+                                'modern': ('现代', 'modern'),
+                                'haiku': ('俳句', 'haiku'),
+                                'sonnet': ('十四行诗', 'sonnet'),
+                                'humorous': ('幽默', 'humorous'),
+                                'absurd': ('荒诞', 'absurd'),
+                                'cyberpunk': ('赛博朋克', 'cyberpunk'),
+                                'gothic': ('哥特', 'gothic'),
+                                'zen': ('禅意', 'zen')
+                            }
+                            
+                            chinese_style_names = {
+                                'classic': ('古典', 'classic'),
+                                'tang': ('唐诗', 'tang'),
+                                'song': ('宋词', 'song'),
+                                'modern': ('现代', 'modern'),
+                                'free': ('自由体', 'free'),
+                                'humorous': ('幽默', 'humorous'),
+                                'absurd': ('荒诞', 'absurd'),
+                                'cyberpunk': ('赛博朋克', 'cyberpunk'),
+                                'zen': ('禅意', 'zen'),
+                                'minimalist': ('极简', 'minimalist')
+                            }
+                            
                             style_parts = []
-                            if log_info.get('english_style'):
-                                style_parts.append(f"英文：{log_info['english_style']}")
-                            if log_info.get('chinese_style'):
-                                style_parts.append(f"中文：{log_info['chinese_style']}")
+                            eng_style = log_info.get('english_style')
+                            if eng_style:
+                                # Check if it's a predefined style or custom
+                                if eng_style in english_style_names:
+                                    chn_name, eng_code = english_style_names[eng_style]
+                                    style_parts.append(f"英文：{chn_name}（{eng_code}）")
+                                else:
+                                    # Custom style: show as is
+                                    style_parts.append(f"英文：{eng_style}")
+                            
+                            chn_style = log_info.get('chinese_style')
+                            if chn_style:
+                                # Check if it's a predefined style or custom
+                                if chn_style in chinese_style_names:
+                                    chn_name, eng_code = chinese_style_names[chn_style]
+                                    style_parts.append(f"中文：{chn_name}（{eng_code}）")
+                                else:
+                                    # Custom style: show as is
+                                    style_parts.append(f"中文：{chn_style}")
                             
                             if style_parts:
                                 style_info = '【' + ' | '.join(style_parts) + '】'
