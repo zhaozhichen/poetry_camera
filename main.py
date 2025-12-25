@@ -206,6 +206,157 @@ def take_picture(filename="image.jpg"):
         logging.error(f"An unexpected error occurred during camera operation: {e}")
         return None
 
+# --- Function to Get Style Settings from Web App ---
+def get_poem_styles_from_webapp():
+    """
+    从 Web 应用获取当前的诗歌风格设置
+    
+    Returns:
+        dict: 包含 'english' 和 'chinese' 风格设置的字典，如果获取失败则返回 None
+    """
+    if not WEB_APP_API_KEY:
+        logging.info("Web app API key not configured. Using default styles.")
+        return None
+    
+    try:
+        logging.info("Fetching poem styles from web app...")
+        headers = {
+            "X-API-Key": WEB_APP_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(
+            f"{WEB_APP_URL}/api/styles",
+            headers=headers,
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            styles = response.json()
+            logging.info(f"Retrieved styles from web app: English={styles.get('english')}, Chinese={styles.get('chinese')}")
+            return styles
+        else:
+            logging.warning(f"Failed to get styles from web app: {response.status_code}. Using default styles.")
+            return None
+    
+    except requests.exceptions.Timeout:
+        logging.warning("Timeout while fetching styles from web app. Using default styles.")
+        return None
+    except requests.exceptions.ConnectionError:
+        logging.warning("Connection error while fetching styles from web app. Using default styles.")
+        return None
+    except Exception as e:
+        logging.warning(f"Error fetching styles from web app: {str(e)}. Using default styles.")
+        return None
+
+
+# --- Function to Build Prompt with Style ---
+def build_prompt_with_style(base_prompt, english_style=None, chinese_style=None):
+    """
+    根据风格设置构建完整的 prompt
+    
+    Args:
+        base_prompt: 基础 prompt（默认风格，如果风格获取失败则使用此 prompt）
+        english_style: 英文诗歌风格（可选，如果为 None 则不添加风格说明，使用默认）
+        chinese_style: 中文诗歌风格（可选，如果为 None 则不添加风格说明，使用默认）
+    
+    Returns:
+        str: 包含风格信息的完整 prompt。如果 english_style 和 chinese_style 都为 None，
+             则返回原始的 base_prompt（默认风格）
+    """
+    prompt = base_prompt
+    
+    logging.info("Building prompt with style:")
+    logging.info(f"  Base prompt length: {len(base_prompt)} characters")
+    logging.info(f"  English style to apply: {english_style if english_style else '(None - will use default)'}")
+    logging.info(f"  Chinese style to apply: {chinese_style if chinese_style else '(None - will use default)'}")
+    
+    # Add English style instruction if provided
+    if english_style:
+        logging.info(f"  Applying English style: '{english_style}'")
+        style_instruction = f"\n\nIMPORTANT: Write the English poem in the '{english_style}' style. "
+        if english_style == 'classic':
+            style_instruction += "Use traditional poetic forms, formal language, and timeless themes."
+        elif english_style == 'romantic':
+            style_instruction += "Emphasize emotion, nature, beauty, and personal feelings."
+        elif english_style == 'modern':
+            style_instruction += "Use contemporary language, free verse, and modern perspectives."
+        elif english_style == 'haiku':
+            style_instruction += "Write in haiku format: three lines with 5-7-5 syllables, focusing on nature and moments."
+        elif english_style == 'sonnet':
+            style_instruction += "Write in sonnet form: 14 lines with iambic pentameter, following traditional sonnet structure."
+        elif english_style == 'humorous':
+            style_instruction += "Make it witty, playful, and lighthearted with humor and clever wordplay."
+        elif english_style == 'absurd':
+            style_instruction += "Create something surreal, unexpected, and delightfully absurd."
+        elif english_style == 'cyberpunk':
+            style_instruction += "Blend technology, dystopian themes, and futuristic imagery."
+        elif english_style == 'gothic':
+            style_instruction += "Use dark, mysterious, and atmospheric imagery with gothic themes."
+        elif english_style == 'zen':
+            style_instruction += "Write with simplicity, mindfulness, and contemplative depth."
+        else:
+            # Custom style
+            style_instruction += f"Write in the style of: {english_style}"
+        
+        logging.info(f"  English style instruction: {style_instruction[:100]}...")
+        
+        old_text = "write a short, descriptive, elegant, and humorous poem in English."
+        new_text = f"write a short, descriptive, elegant poem in English.{style_instruction}"
+        
+        if old_text in prompt:
+            prompt = prompt.replace(old_text, new_text)
+            logging.info("  ✓ English style instruction successfully inserted into prompt")
+        else:
+            logging.warning(f"  ⚠ Could not find target text '{old_text}' in prompt. Style may not be applied correctly.")
+    else:
+        logging.info("  No English style specified - using default")
+    
+    # Add Chinese style instruction if provided
+    if chinese_style:
+        logging.info(f"  Applying Chinese style: '{chinese_style}'")
+        style_instruction = f"\n\nIMPORTANT: Write the Chinese poem in the '{chinese_style}' style. "
+        if chinese_style == 'classic':
+            style_instruction += "使用古典诗词的格律、用典和传统意象。"
+        elif chinese_style == 'tang':
+            style_instruction += "采用唐诗的格律（五言或七言），注重对仗、平仄和意境。"
+        elif chinese_style == 'song':
+            style_instruction += "采用宋词的词牌风格，注重韵律、节奏和情感表达。"
+        elif chinese_style == 'modern':
+            style_instruction += "使用现代汉语，自由体，表达现代人的感受和思考。"
+        elif chinese_style == 'free':
+            style_instruction += "使用自由体，不受传统格律限制，注重情感和意象的表达。"
+        elif chinese_style == 'humorous':
+            style_instruction += "写得幽默风趣，轻松活泼，带有巧思和趣味。"
+        elif chinese_style == 'absurd':
+            style_instruction += "创作超现实、荒诞、出人意料的作品。"
+        elif chinese_style == 'cyberpunk':
+            style_instruction += "融合科技、赛博朋克元素，展现未来感和反乌托邦色彩。"
+        elif chinese_style == 'zen':
+            style_instruction += "写得简洁、禅意，富有冥想和沉思的深度。"
+        elif chinese_style == 'minimalist':
+            style_instruction += "极简风格，用最少的文字表达最深的意境。"
+        else:
+            # Custom style
+            style_instruction += f"按照以下风格创作：{chinese_style}"
+        
+        logging.info(f"  Chinese style instruction: {style_instruction[:100]}...")
+        
+        old_text = "compose an ORIGINAL poem in Chinese about the same scene."
+        new_text = f"compose an ORIGINAL poem in Chinese about the same scene.{style_instruction}"
+        
+        if old_text in prompt:
+            prompt = prompt.replace(old_text, new_text)
+            logging.info("  ✓ Chinese style instruction successfully inserted into prompt")
+        else:
+            logging.warning(f"  ⚠ Could not find target text '{old_text}' in prompt. Style may not be applied correctly.")
+    else:
+        logging.info("  No Chinese style specified - using default")
+    
+    logging.info(f"  Final prompt length: {len(prompt)} characters")
+    return prompt
+
+
 # --- Function to Generate Poem with Gemini via curl ---
 def generate_poem_from_image_via_curl(image_path, api_key):
     """
@@ -218,6 +369,43 @@ def generate_poem_from_image_via_curl(image_path, api_key):
     if not api_key:
         logging.error("Error: Gemini API Key is not set or loaded. Check .api_key file.")
         return None
+    
+    # Get style settings from web app (optional - if this fails, we use default prompt)
+    # This should not block poem generation even if network is unavailable
+    try:
+        styles = get_poem_styles_from_webapp()
+        english_style = styles.get('english') if styles else None
+        chinese_style = styles.get('chinese') if styles else None
+        
+        # Log the retrieved styles for debugging
+        logging.info("=" * 80)
+        logging.info("STYLE RETRIEVAL RESULT:")
+        logging.info(f"  English style: {english_style if english_style else '(None - using default)'}")
+        logging.info(f"  Chinese style: {chinese_style if chinese_style else '(None - using default)'}")
+        logging.info("=" * 80)
+        
+        # If styles are not available, use default prompt (no style modifications)
+        if not english_style and not chinese_style:
+            logging.info("No style settings found or failed to fetch. Using default prompt.")
+            prompt = POEM_GENERATION_PROMPT
+        else:
+            # Build prompt with style
+            logging.info(f"Applying styles to prompt: English={english_style}, Chinese={chinese_style}")
+            prompt = build_prompt_with_style(POEM_GENERATION_PROMPT, english_style, chinese_style)
+    except Exception as e:
+        # If style fetching fails for any reason, use default prompt
+        # This ensures poem generation continues even without network connectivity
+        logging.warning(f"Error fetching styles (non-critical, using default): {str(e)}")
+        prompt = POEM_GENERATION_PROMPT
+    
+    # Log the complete prompt for debugging style application
+    logging.info("=" * 80)
+    logging.info("COMPLETE PROMPT TO GEMINI:")
+    logging.info("-" * 80)
+    logging.info(prompt)
+    logging.info("-" * 80)
+    logging.info("=" * 80)
+    
     try:
         logging.info(f"Reading image and encoding for Gemini...")
         with open(image_path, "rb") as image_file:
@@ -228,7 +416,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
             "contents": [
                 {
                     "parts": [
-                        {"text": POEM_GENERATION_PROMPT}, # The text prompt for the poem generation.
+                        {"text": prompt}, # The text prompt for the poem generation (with style).
                         {
                             "inline_data": {
                                 "mime_type": "image/jpeg", # Specify the MIME type of the image.
@@ -306,25 +494,28 @@ def generate_poem_from_image_via_curl(image_path, api_key):
 # --- Function to Upload Poem to Web App ---
 def upload_poem_to_webapp(image_path, poem_text):
     """
-    上传照片和诗歌到 Web 应用
+    上传照片和诗歌到 Web 应用（可选功能，失败不影响打印）
+    
+    注意：此函数是可选功能，即使上传失败也不会影响核心功能（拍照和打印）。
+    如果相机无法连接到服务器，此函数会静默失败，不影响诗歌生成和打印。
     
     Args:
         image_path: 照片文件路径
         poem_text: 生成的诗歌文本
     
     Returns:
-        bool: 上传成功返回 True，失败返回 False
+        bool: 上传成功返回 True，失败返回 False（但不抛出异常）
     """
     if not WEB_APP_API_KEY:
-        logging.warning("Web app API key not configured. Skipping upload.")
+        logging.info("Web app API key not configured. Skipping upload (non-critical).")
         return False
     
     if not os.path.exists(image_path):
-        logging.error(f"Error: Image file not found at {image_path}")
+        logging.warning(f"Image file not found at {image_path}. Skipping upload (non-critical).")
         return False
     
     try:
-        logging.info("Uploading poem to web app...")
+        logging.info("Attempting to upload poem to web app (optional backup)...")
         
         # 读取图片并转换为 base64
         with open(image_path, 'rb') as f:
@@ -346,24 +537,24 @@ def upload_poem_to_webapp(image_path, poem_text):
             f"{WEB_APP_URL}/api/upload",
             json=payload,
             headers=headers,
-            timeout=30
+            timeout=10  # Reduced timeout to fail faster if server is unreachable
         )
         
         if response.status_code == 201:
             logging.info("Poem uploaded successfully to web app!")
             return True
         else:
-            logging.error(f"Failed to upload poem: {response.status_code} - {response.text}")
+            logging.warning(f"Failed to upload poem to web app (non-critical): {response.status_code} - {response.text}")
             return False
     
     except requests.exceptions.Timeout:
-        logging.error("Timeout while uploading to web app. The server may be slow or unreachable.")
+        logging.warning("Timeout while uploading to web app (non-critical). Server may be slow or unreachable. Poem was already printed successfully.")
         return False
     except requests.exceptions.ConnectionError:
-        logging.error("Connection error while uploading to web app. Check your internet connection.")
+        logging.warning("Connection error while uploading to web app (non-critical). Check internet connection. Poem was already printed successfully.")
         return False
     except Exception as e:
-        logging.error(f"Unexpected error uploading to web app: {str(e)}")
+        logging.warning(f"Unexpected error uploading to web app (non-critical): {str(e)}. Poem was already printed successfully.")
         return False
 
 # --- Function to Print Poem on Thermal Printer ---
@@ -395,8 +586,8 @@ def print_poem_on_thermal_printer(poem_text):
         )
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
 
-        # Set printer alignment and font for the header.
-        p.set(align='center', font='a', height=1, width=1)
+        # Set printer alignment and font - left aligned for poem text
+        p.set(align='left', font='a', height=1, width=1)
 
         # Poem title might be here, if returned by Gemini with a title.
         # Ensure the entire poem_text is handled for both English and Chinese.
@@ -473,12 +664,26 @@ def run_poetry_printer(channel):
             poem = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
 
             if poem:
-                # 3. If poem was generated successfully, print it.
-                print_poem_on_thermal_printer(poem)
+                # 3. Log the generated poem
+                logging.info("=" * 80)
+                logging.info("GENERATED POEM:")
+                logging.info("-" * 80)
+                logging.info(poem)
+                logging.info("-" * 80)
+                logging.info("=" * 80)
                 
-                # 4. Upload to web app (if configured)
+                # TEMPORARILY SKIP PHYSICAL PRINTING - for debugging style application
+                # print_poem_on_thermal_printer(poem)
+                logging.info("Physical printing temporarily disabled for debugging")
+                
+                # 4. Upload to web app (if configured) - this is optional and should not block printing
+                # Even if upload fails, the poem has already been printed successfully
                 if WEB_APP_API_KEY:
-                    upload_poem_to_webapp(captured_filepath, poem)
+                    try:
+                        upload_poem_to_webapp(captured_filepath, poem)
+                    except Exception as e:
+                        # Log error but don't fail - printing was already successful
+                        logging.warning(f"Failed to upload to web app (non-critical): {str(e)}")
                 else:
                     logging.info("Web app upload skipped (API key not configured)")
             else:
