@@ -108,28 +108,30 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 # Prompt string for instructing Gemini to generate a poem based on an image.
 # Note: Style information will be added separately via build_prompt_with_style()
 # PRIMARY GOAL: Generate high-quality, artistic poetry that deeply captures the essence of the image.
+# Order: Chinese first, then English
 POEM_GENERATION_PROMPT = (
-    "Your primary task is to create a high-quality, artistic poem in English based on the image. "
+    "Your primary task is to create a high-quality, artistic poem in Chinese based on the image. "
     "First, carefully analyze the image's composition, atmosphere, mood, and emotional resonance. "
-    "Then, craft a poem that is: descriptive, elegant, and subtly humorous. "
-    "Use vivid imagery, precise language, and poetic devices (metaphor, alliteration, rhythm) to create depth. "
+    "Then, craft a poem that demonstrates poetic artistry with rich imagery, elegant language, and cultural depth. "
     "The poem should capture not just what is seen, but the deeper meaning, emotion, and atmosphere of the scene. "
+    "Use vivid imagery, precise language, and poetic devices natural to Chinese poetic expression. "
     "Ensure the poem's style and imagery deeply resonate with the specific mood of the scene. "
     "Start the poem with a title, adorned with three tildes (~~~ ) on each side. "
     "Add a single empty line after the title. "
     "IMPORTANT: Output ONLY the poem. Do not include any introductory explanations, analysis, or descriptions before the poem."
 )
-# Comment this line out if you don't want Chinese translation.
+# Comment this line out if you don't want English translation.
 POEM_GENERATION_PROMPT += (
-    "\n\nNext, compose an ORIGINAL, high-quality poem in Chinese about the same scene. "
-    "IMPORTANT: Do not translate the English poem. Instead, create a distinct, independent piece that captures "
-    "the image's spirit using imagery and phrasing natural to Chinese poetic expression. "
-    "The Chinese poem should demonstrate poetic artistry with rich imagery, elegant language, and cultural depth. "
+    "\n\nNext, compose an ORIGINAL, high-quality poem in English about the same scene. "
+    "IMPORTANT: Do not translate the Chinese poem. Instead, create a distinct, independent piece that captures "
+    "the image's spirit using imagery and phrasing natural to English poetic expression. "
+    "The English poem should be: descriptive, elegant, and subtly humorous. "
+    "Use vivid imagery, precise language, and poetic devices (metaphor, alliteration, rhythm) to create depth. "
     "It should also closely reflect the photo's unique atmosphere while standing as a complete work of art on its own. "
-    "Place this directly following the English version after a single empty line, "
-    "and also adorn the Chinese title with three tildes (~~~ ) on each side, "
-    "followed by a single empty line before the Chinese poem body."
-    "\n\nOUTPUT FORMAT: Output ONLY the two poems (English first, then Chinese) with their titles. "
+    "Place this directly following the Chinese version after a single empty line, "
+    "and also adorn the English title with three tildes (~~~ ) on each side, "
+    "followed by a single empty line before the English poem body."
+    "\n\nOUTPUT FORMAT: Output ONLY the two poems (Chinese first, then English) with their titles. "
     "Do not include any introductory text, explanations, or analysis before the poems."
 )
 
@@ -277,51 +279,10 @@ def build_prompt_with_style(base_prompt, english_style=None, chinese_style=None)
     
     logging.info("Building prompt with style:")
     logging.info(f"  Base prompt length: {len(base_prompt)} characters")
-    logging.info(f"  English style to apply: {english_style if english_style else '(None - will use default)'}")
     logging.info(f"  Chinese style to apply: {chinese_style if chinese_style else '(None - will use default)'}")
+    logging.info(f"  English style to apply: {english_style if english_style else '(None - will use default)'}")
     
-    # Add English style instruction if provided
-    if english_style:
-        logging.info(f"  Applying English style: '{english_style}'")
-        style_instruction = f"\n\nIMPORTANT: Write the English poem in the '{english_style}' style. "
-        if english_style == 'classic':
-            style_instruction += "Use traditional poetic forms, formal language, and timeless themes."
-        elif english_style == 'romantic':
-            style_instruction += "Emphasize emotion, nature, beauty, and personal feelings."
-        elif english_style == 'modern':
-            style_instruction += "Use contemporary language, free verse, and modern perspectives."
-        elif english_style == 'haiku':
-            style_instruction += "Write in haiku format: three lines with 5-7-5 syllables, focusing on nature and moments."
-        elif english_style == 'sonnet':
-            style_instruction += "Write in sonnet form: 14 lines with iambic pentameter, following traditional sonnet structure."
-        elif english_style == 'humorous':
-            style_instruction += "Make it witty, playful, and lighthearted with humor and clever wordplay."
-        elif english_style == 'absurd':
-            style_instruction += "Create something surreal, unexpected, and delightfully absurd."
-        elif english_style == 'cyberpunk':
-            style_instruction += "Blend technology, dystopian themes, and futuristic imagery."
-        elif english_style == 'gothic':
-            style_instruction += "Use dark, mysterious, and atmospheric imagery with gothic themes."
-        elif english_style == 'zen':
-            style_instruction += "Write with simplicity, mindfulness, and contemplative depth."
-        else:
-            # Custom style
-            style_instruction += f"Write in the style of: {english_style}"
-        
-        logging.info(f"  English style instruction: {style_instruction[:100]}...")
-        
-        old_text = "write a short, descriptive, elegant, and humorous poem in English."
-        new_text = f"write a short, descriptive, elegant poem in English.{style_instruction}"
-        
-        if old_text in prompt:
-            prompt = prompt.replace(old_text, new_text)
-            logging.info("  ✓ English style instruction successfully inserted into prompt")
-        else:
-            logging.warning(f"  ⚠ Could not find target text '{old_text}' in prompt. Style may not be applied correctly.")
-    else:
-        logging.info("  No English style specified - using default")
-    
-    # Add Chinese style instruction if provided
+    # Add Chinese style instruction first (since Chinese poem comes first)
     if chinese_style:
         logging.info(f"  Applying Chinese style: '{chinese_style}'")
         style_instruction = f"\n\nIMPORTANT: Write the Chinese poem in the '{chinese_style}' style. "
@@ -349,18 +310,71 @@ def build_prompt_with_style(base_prompt, english_style=None, chinese_style=None)
             # Custom style
             style_instruction += f"按照以下风格创作：{chinese_style}"
         
-        logging.info(f"  Chinese style instruction: {style_instruction[:100]}...")
-        
-        old_text = "compose an ORIGINAL poem in Chinese about the same scene."
-        new_text = f"compose an ORIGINAL poem in Chinese about the same scene.{style_instruction}"
-        
-        if old_text in prompt:
-            prompt = prompt.replace(old_text, new_text)
+        # Insert style instruction after "Then, craft a poem that demonstrates poetic artistry"
+        insertion_point = "Then, craft a poem that demonstrates poetic artistry with rich imagery, elegant language, and cultural depth."
+        if insertion_point in prompt:
+            # Insert style instruction right after this line
+            prompt = prompt.replace(
+                insertion_point,
+                insertion_point + style_instruction
+            )
             logging.info("  ✓ Chinese style instruction successfully inserted into prompt")
         else:
-            logging.warning(f"  ⚠ Could not find target text '{old_text}' in prompt. Style may not be applied correctly.")
+            # Fallback: insert at the beginning of Chinese poem section
+            prompt = prompt.replace(
+                "Your primary task is to create a high-quality, artistic poem in Chinese",
+                f"Your primary task is to create a high-quality, artistic poem in Chinese{style_instruction}"
+            )
+            logging.info("  ✓ Chinese style instruction inserted at beginning of Chinese section")
     else:
         logging.info("  No Chinese style specified - using default")
+    
+    # Add English style instruction if provided (English comes after Chinese)
+    if english_style:
+        logging.info(f"  Applying English style: '{english_style}'")
+        style_instruction = f"\n\nIMPORTANT: Write the English poem in the '{english_style}' style. "
+        if english_style == 'classic':
+            style_instruction += "Use traditional poetic forms, formal language, and timeless themes."
+        elif english_style == 'romantic':
+            style_instruction += "Emphasize emotion, nature, beauty, and personal feelings."
+        elif english_style == 'modern':
+            style_instruction += "Use contemporary language, free verse, and modern perspectives."
+        elif english_style == 'haiku':
+            style_instruction += "Write in haiku format: three lines with 5-7-5 syllables, focusing on nature and moments."
+        elif english_style == 'sonnet':
+            style_instruction += "Write in sonnet form: 14 lines with iambic pentameter, following traditional sonnet structure."
+        elif english_style == 'humorous':
+            style_instruction += "Make it witty, playful, and lighthearted with humor and clever wordplay."
+        elif english_style == 'absurd':
+            style_instruction += "Create something surreal, unexpected, and delightfully absurd."
+        elif english_style == 'cyberpunk':
+            style_instruction += "Blend technology, dystopian themes, and futuristic imagery."
+        elif english_style == 'gothic':
+            style_instruction += "Use dark, mysterious, and atmospheric imagery with gothic themes."
+        elif english_style == 'zen':
+            style_instruction += "Write with simplicity, mindfulness, and contemplative depth."
+        else:
+            # Custom style
+            style_instruction += f"Write in the style of: {english_style}"
+        
+        # Insert style instruction after "The English poem should be:"
+        insertion_point = "The English poem should be: descriptive, elegant, and subtly humorous."
+        if insertion_point in prompt:
+            # Insert style instruction right after this line
+            prompt = prompt.replace(
+                insertion_point,
+                insertion_point + style_instruction
+            )
+            logging.info("  ✓ English style instruction successfully inserted into prompt")
+        else:
+            # Fallback: insert at the beginning of English poem section
+            prompt = prompt.replace(
+                "Next, compose an ORIGINAL, high-quality poem in English",
+                f"Next, compose an ORIGINAL, high-quality poem in English{style_instruction}"
+            )
+            logging.info("  ✓ English style instruction inserted at beginning of English section")
+    else:
+        logging.info("  No English style specified - using default")
     
     logging.info(f"  Final prompt length: {len(prompt)} characters")
     return prompt
@@ -540,16 +554,7 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                             }
                             
                             style_parts = []
-                            eng_style = log_info.get('english_style')
-                            if eng_style:
-                                # Check if it's a predefined style or custom
-                                if eng_style in english_style_names:
-                                    chn_name, eng_code = english_style_names[eng_style]
-                                    style_parts.append(f"英文：{chn_name}（{eng_code}）")
-                                else:
-                                    # Custom style: show as is
-                                    style_parts.append(f"英文：{eng_style}")
-                            
+                            # Add Chinese style first (since Chinese poem comes first)
                             chn_style = log_info.get('chinese_style')
                             if chn_style:
                                 # Check if it's a predefined style or custom
@@ -559,6 +564,17 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                                 else:
                                     # Custom style: show as is
                                     style_parts.append(f"中文：{chn_style}")
+                            
+                            # Add English style second (since English poem comes after Chinese)
+                            eng_style = log_info.get('english_style')
+                            if eng_style:
+                                # Check if it's a predefined style or custom
+                                if eng_style in english_style_names:
+                                    chn_name, eng_code = english_style_names[eng_style]
+                                    style_parts.append(f"英文：{chn_name}（{eng_code}）")
+                                else:
+                                    # Custom style: show as is
+                                    style_parts.append(f"英文：{eng_style}")
                             
                             if style_parts:
                                 style_info = '【' + ' | '.join(style_parts) + '】'
