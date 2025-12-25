@@ -362,13 +362,24 @@ def generate_poem_from_image_via_curl(image_path, api_key):
     """
     Sends an image to the Google Gemini API via a curl subprocess to generate a poem.
     The image is base64-encoded and sent as part of a JSON payload.
+    
+    Returns:
+        tuple: (poem_text, log_info_dict) or (None, None) if failed
+        log_info_dict contains: english_style, chinese_style, prompt
     """
     if not os.path.exists(image_path):
         logging.error(f"Error: Image file not found at {image_path}")
-        return None
+        return None, None
     if not api_key:
         logging.error("Error: Gemini API Key is not set or loaded. Check .api_key file.")
-        return None
+        return None, None
+    
+    # Initialize log info dictionary to collect information for server sync
+    log_info = {
+        'english_style': None,
+        'chinese_style': None,
+        'prompt': None
+    }
     
     # Get style settings from web app (optional - if this fails, we use default prompt)
     # This should not block poem generation even if network is unavailable
@@ -376,6 +387,10 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         styles = get_poem_styles_from_webapp()
         english_style = styles.get('english') if styles else None
         chinese_style = styles.get('chinese') if styles else None
+        
+        # Store in log info
+        log_info['english_style'] = english_style
+        log_info['chinese_style'] = chinese_style
         
         # Log the retrieved styles for debugging
         logging.info("=" * 80)
@@ -397,6 +412,9 @@ def generate_poem_from_image_via_curl(image_path, api_key):
         # This ensures poem generation continues even without network connectivity
         logging.warning(f"Error fetching styles (non-critical, using default): {str(e)}")
         prompt = POEM_GENERATION_PROMPT
+    
+    # Store prompt in log info
+    log_info['prompt'] = prompt
     
     # Log the complete prompt for debugging style application
     logging.info("=" * 80)
@@ -459,40 +477,40 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                         logging.info("\n--- Generated Poem ---")
                         logging.info(poem)
                         logging.info("----------------------")
-                        return poem
+                        return poem, log_info
             elif 'safetyRatings' in first_candidate:
                 # Log a warning if the response was blocked by Gemini's safety settings.
                 logging.warning("Warning: Response blocked by safety settings.")
                 for rating in first_candidate['safetyRatings']:
                     logging.warning(f"  {rating['category']}: {rating['probability']}")
-                return None
+                return None, None
         if 'error' in response_json:
             # Log specific API errors returned by Gemini.
             logging.error(f"API Error: {response_json['error']['message']}")
-            return None
+            return None, None
 
         # Log if the expected poem content was not found in the response or if the format was unexpected.
         logging.error("Error: Could not find poem in Gemini response or unexpected response format.")
         logging.error(f"Full response: {response_json}")
-        return None
+        return None, None
     except subprocess.CalledProcessError as e:
         # Log errors specifically from the curl command execution (e.g., network issues, invalid URL).
         logging.error(f"Error executing curl command: {e}")
         logging.error(f"Curl stdout: {e.stdout}")
         logging.error(f"Curl stderr: {e.stderr}")
-        return None
+        return None, None
     except json.JSONDecodeError as e:
         # Log errors that occur during JSON parsing of the Gemini response.
         logging.error(f"Error parsing Gemini response JSON: {e}")
         logging.error(f"Raw response: {process.stdout if 'process' in locals() else 'N/A'}")
-        return None
+        return None, None
     except Exception as e:
         # Catch any other unexpected errors that might occur during the Gemini API call process.
         logging.error(f"An unexpected error occurred during Gemini API call: {e}")
-        return None
+        return None, None
 
 # --- Function to Upload Poem to Web App ---
-def upload_poem_to_webapp(image_path, poem_text):
+def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
     """
     上传照片和诗歌到 Web 应用（可选功能，失败不影响打印）
     
@@ -502,6 +520,7 @@ def upload_poem_to_webapp(image_path, poem_text):
     Args:
         image_path: 照片文件路径
         poem_text: 生成的诗歌文本
+        camera_logs: 相机端的日志信息（可选），用于同步到服务器端日志
     
     Returns:
         bool: 上传成功返回 True，失败返回 False（但不抛出异常）
@@ -526,6 +545,10 @@ def upload_poem_to_webapp(image_path, poem_text):
             "poem": poem_text,
             "image": image_data
         }
+        
+        # 如果提供了相机端日志，一起上传
+        if camera_logs:
+            payload["camera_logs"] = camera_logs
         
         # 发送 POST 请求
         headers = {
@@ -661,7 +684,7 @@ def run_poetry_printer(channel):
 
         if captured_filepath:
             # 2. If picture was taken successfully, generate a poem using Gemini.
-            poem = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
+            poem, log_info = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
 
             if poem:
                 # 3. Log the generated poem
@@ -680,7 +703,14 @@ def run_poetry_printer(channel):
                 # Even if upload fails, the poem has already been printed successfully
                 if WEB_APP_API_KEY:
                     try:
-                        upload_poem_to_webapp(captured_filepath, poem)
+                        # Prepare camera logs for server sync
+                        camera_logs = {
+                            'english_style': log_info.get('english_style') if log_info else None,
+                            'chinese_style': log_info.get('chinese_style') if log_info else None,
+                            'prompt': log_info.get('prompt') if log_info else None,
+                            'generated_poem': poem
+                        }
+                        upload_poem_to_webapp(captured_filepath, poem, camera_logs=camera_logs)
                     except Exception as e:
                         # Log error but don't fail - printing was already successful
                         logging.warning(f"Failed to upload to web app (non-critical): {str(e)}")
