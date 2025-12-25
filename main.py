@@ -8,8 +8,10 @@ import picamera
 from PIL import Image
 from escpos.printer import Serial
 import RPi.GPIO as GPIO
-import logging # Import the logging module
-import requests  # Added for web app upload
+import logging
+import requests
+from datetime import datetime
+import pytz
 
 # Try to load .env file if python-dotenv is available
 try:
@@ -37,8 +39,21 @@ root_logger.setLevel(LOG_LEVEL)
 if root_logger.hasHandlers():
     root_logger.handlers.clear()
 
-# Create a formatter for the log messages
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+# Create a custom formatter that uses EST timezone
+class ESTFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None):
+        super().__init__(fmt, datefmt)
+        self.est_tz = pytz.timezone('US/Eastern')
+    
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=self.est_tz)
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            s = dt.strftime('%Y-%m-%d %H:%M:%S %Z')
+        return s
+
+formatter = ESTFormatter('%(asctime)s - %(levelname)s - %(message)s')
 
 # Add a FileHandler to write logs to the specified file
 file_handler = logging.FileHandler(LOG_FILE)
@@ -691,6 +706,55 @@ def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
         logging.warning(f"Unexpected error uploading to web app (non-critical): {str(e)}. Poem was already printed successfully.")
         return False
 
+
+def send_camera_heartbeat():
+    """
+    发送心跳信号到 Web 应用，更新相机在线状态（可选功能，失败不影响相机启动）
+    
+    注意：此函数是可选功能，即使心跳失败也不会影响相机启动。
+    如果相机无法连接到服务器，此函数会静默失败，不影响相机正常运行。
+    
+    Returns:
+        bool: 心跳成功返回 True，失败返回 False（但不抛出异常）
+    """
+    if not WEB_APP_API_KEY:
+        logging.info("Web app API key not configured. Skipping heartbeat (non-critical).")
+        return False
+    
+    try:
+        logging.info("Sending camera heartbeat to web app...")
+        
+        # 发送 POST 请求
+        headers = {
+            "X-API-Key": WEB_APP_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(
+            f"{WEB_APP_URL}/api/camera/heartbeat",
+            json={},  # Empty payload, just a heartbeat signal
+            headers=headers,
+            timeout=5  # Short timeout to fail fast
+        )
+        
+        if response.status_code == 200:
+            logging.info("Camera heartbeat sent successfully to web app!")
+            return True
+        else:
+            logging.warning(f"Failed to send camera heartbeat (non-critical): {response.status_code} - {response.text}")
+            return False
+    
+    except requests.exceptions.Timeout:
+        logging.warning("Timeout while sending camera heartbeat (non-critical). Server may be slow or unreachable.")
+        return False
+    except requests.exceptions.ConnectionError:
+        logging.warning("Connection error while sending camera heartbeat (non-critical). Check internet connection.")
+        return False
+    except Exception as e:
+        logging.warning(f"Unexpected error sending camera heartbeat (non-critical): {str(e)}.")
+        return False
+
+
 # --- Function to Print Poem on Thermal Printer ---
 def print_poem_on_thermal_printer(poem_text):
     """
@@ -849,6 +913,13 @@ if __name__ == "__main__":
             logging.info(f"Web app upload enabled. URL: {WEB_APP_URL}")
         else:
             logging.info("Web app upload disabled (WEB_APP_API_KEY not configured in .env)")
+
+        # Send heartbeat to web app to indicate camera is online
+        # This allows the web app to show camera status before first photo is taken
+        if WEB_APP_API_KEY:
+            send_camera_heartbeat()
+        else:
+            logging.info("Skipping camera heartbeat (WEB_APP_API_KEY not configured)")
 
         # Add event detection for the button press on the falling edge (button pressed).
         # bouncetime helps prevent multiple triggers from a single physical press.
