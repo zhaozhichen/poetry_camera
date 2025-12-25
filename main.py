@@ -107,11 +107,11 @@ if not API_KEY:
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
 # Prompt string for instructing Gemini to generate a poem based on an image.
 POEM_GENERATION_PROMPT = (
-    "First, carefully analyze the environment, theme, background, and atmosphere of the picture. "
-    "Based on this visual analysis, write a short, descriptive, elegant, and humorous poem in English. "
+    "Write a short, descriptive, elegant, and humorous poem in English based on the image. "
     "Ensure the poem's style and imagery deeply resonate with the specific mood of the scene. "
     "Start the poem with a title, adorned with three tildes (~~~ ) on each side. "
-    "Add a single empty line after the title."
+    "Add a single empty line after the title. "
+    "IMPORTANT: Output ONLY the poem. Do not include any introductory explanations, analysis, or descriptions before the poem."
 )
 # Comment this line out if you don't want Chinese translation.
 POEM_GENERATION_PROMPT += (
@@ -122,6 +122,8 @@ POEM_GENERATION_PROMPT += (
     "Place this directly following the English version after a single empty line, "
     "and also adorn the Chinese title with three tildes (~~~ ) on each side, "
     "followed by a single empty line before the Chinese poem body."
+    "\n\nOUTPUT FORMAT: Output ONLY the two poems (English first, then Chinese) with their titles. "
+    "Do not include any introductory text, explanations, or analysis before the poems."
 )
 
 # --- Configuration for Web App Upload ---
@@ -474,9 +476,53 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                 for part in first_candidate['content']['parts']:
                     if 'text' in part:
                         poem = part['text']
-                        logging.info("\n--- Generated Poem ---")
+                        
+                        # Remove introductory explanation text if present
+                        # Find the first occurrence of poem title marker (~~~)
+                        first_poem_marker = poem.find('~~~')
+                        if first_poem_marker > 0:
+                            # Remove everything before the first poem title
+                            poem = poem[first_poem_marker:].strip()
+                        elif first_poem_marker == -1:
+                            # No poem marker found, try to remove common intro patterns
+                            lines = poem.split('\n')
+                            cleaned_lines = []
+                            found_poem_start = False
+                            for line in lines:
+                                line_stripped = line.strip()
+                                # Skip obvious intro lines
+                                if not found_poem_start and (
+                                    line_stripped.lower().startswith('based on') or
+                                    line_stripped.lower().startswith('here are') or
+                                    line_stripped.lower().startswith('here is') or
+                                    (line_stripped and len(line_stripped) > 100 and 'analysis' in line_stripped.lower())
+                                ):
+                                    continue
+                                else:
+                                    found_poem_start = True
+                                    cleaned_lines.append(line)
+                            poem = '\n'.join(cleaned_lines).strip()
+                        
+                        # Add style information at the end if styles were applied
+                        if log_info.get('english_style') or log_info.get('chinese_style'):
+                            style_parts = []
+                            if log_info.get('english_style'):
+                                style_parts.append(f"英文：{log_info['english_style']}")
+                            if log_info.get('chinese_style'):
+                                style_parts.append(f"中文：{log_info['chinese_style']}")
+                            
+                            if style_parts:
+                                style_info = '【' + ' | '.join(style_parts) + '】'
+                                # Ensure poem ends with newline before adding style info
+                                poem = poem.rstrip() + '\n\n' + style_info
+                                logging.info(f"Added style info to poem: {style_info}")
+                        
+                        # Log the final poem (only once, after all processing)
+                        logging.info("\n--- Generated Poem (Final) ---")
                         logging.info(poem)
                         logging.info("----------------------")
+                        
+                        log_info['poem'] = poem  # Update log_info with processed poem (including style info)
                         return poem, log_info
             elif 'safetyRatings' in first_candidate:
                 # Log a warning if the response was blocked by Gemini's safety settings.
@@ -687,14 +733,7 @@ def run_poetry_printer(channel):
             poem, log_info = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
 
             if poem:
-                # 3. Log the generated poem
-                logging.info("=" * 80)
-                logging.info("GENERATED POEM:")
-                logging.info("-" * 80)
-                logging.info(poem)
-                logging.info("-" * 80)
-                logging.info("=" * 80)
-                
+                # Poem is already logged in generate_poem_from_image_via_curl function
                 # TEMPORARILY SKIP PHYSICAL PRINTING - for debugging style application
                 # print_poem_on_thermal_printer(poem)
                 logging.info("Physical printing temporarily disabled for debugging")
