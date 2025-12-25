@@ -14,3 +14,6 @@ requests
 # Environment variable loading (optional but recommended)
 # If not installed, .env file will be parsed manually
 python-dotenv
+
+# Timezone support for logging
+pytz
