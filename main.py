@@ -721,8 +721,14 @@ def send_camera_heartbeat():
         logging.info("Web app API key not configured. Skipping heartbeat (non-critical).")
         return False
     
+    heartbeat_url = f"{WEB_APP_URL}/api/camera/heartbeat"
+    
     try:
-        logging.info("Sending camera heartbeat to web app...")
+        logging.info("=" * 80)
+        logging.info("CAMERA HEARTBEAT:")
+        logging.info(f"  URL: {heartbeat_url}")
+        logging.info(f"  Purpose: Update camera online status on web app")
+        logging.info("-" * 80)
         
         # 发送 POST 请求
         headers = {
@@ -730,28 +736,55 @@ def send_camera_heartbeat():
             "Content-Type": "application/json"
         }
         
+        logging.info("  Sending POST request to web app...")
+        
         response = requests.post(
-            f"{WEB_APP_URL}/api/camera/heartbeat",
+            heartbeat_url,
             json={},  # Empty payload, just a heartbeat signal
             headers=headers,
             timeout=5  # Short timeout to fail fast
         )
         
+        logging.info(f"  Response status code: {response.status_code}")
+        
         if response.status_code == 200:
-            logging.info("Camera heartbeat sent successfully to web app!")
-            return True
+            try:
+                response_data = response.json()
+                logging.info(f"  Response data: {response_data}")
+                logging.info("  ✓ Camera heartbeat sent successfully to web app!")
+                logging.info("=" * 80)
+                return True
+            except json.JSONDecodeError:
+                logging.warning(f"  ⚠ Response is not valid JSON: {response.text}")
+                logging.info("  ✓ Camera heartbeat sent (status 200, but response format unexpected)")
+                logging.info("=" * 80)
+                return True
         else:
-            logging.warning(f"Failed to send camera heartbeat (non-critical): {response.status_code} - {response.text}")
+            logging.warning(f"  ✗ Failed to send camera heartbeat (non-critical):")
+            logging.warning(f"    Status code: {response.status_code}")
+            logging.warning(f"    Response: {response.text}")
+            logging.info("=" * 80)
             return False
     
     except requests.exceptions.Timeout:
-        logging.warning("Timeout while sending camera heartbeat (non-critical). Server may be slow or unreachable.")
+        logging.warning("  ✗ Timeout while sending camera heartbeat (non-critical):")
+        logging.warning(f"    URL: {heartbeat_url}")
+        logging.warning("    Server may be slow or unreachable.")
+        logging.info("=" * 80)
         return False
-    except requests.exceptions.ConnectionError:
-        logging.warning("Connection error while sending camera heartbeat (non-critical). Check internet connection.")
+    except requests.exceptions.ConnectionError as e:
+        logging.warning("  ✗ Connection error while sending camera heartbeat (non-critical):")
+        logging.warning(f"    URL: {heartbeat_url}")
+        logging.warning(f"    Error: {str(e)}")
+        logging.warning("    Check internet connection.")
+        logging.info("=" * 80)
         return False
     except Exception as e:
-        logging.warning(f"Unexpected error sending camera heartbeat (non-critical): {str(e)}.")
+        logging.warning(f"  ✗ Unexpected error sending camera heartbeat (non-critical):")
+        logging.warning(f"    URL: {heartbeat_url}")
+        logging.warning(f"    Error type: {type(e).__name__}")
+        logging.warning(f"    Error message: {str(e)}")
+        logging.info("=" * 80)
         return False
 
 
