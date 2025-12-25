@@ -691,6 +691,8 @@ def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
         
         if response.status_code == 201:
             logging.info("Poem uploaded successfully to web app!")
+            # Send heartbeat after successful upload to update camera online status
+            send_camera_heartbeat()
             return True
         else:
             logging.warning(f"Failed to upload poem to web app (non-critical): {response.status_code} - {response.text}")
