@@ -913,12 +913,29 @@ def print_poem_on_thermal_printer(poem_text, qr_code_bytes=None, line_art_path=N
         )
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
 
+        # Print a header first
+        p.set(align='center', font='a')
+        p.text("--- Poetry Camera ---\n\n")
+
         # Print line art if available
         if line_art_path and os.path.exists(line_art_path):
             try:
                 logging.info(f"Printing line art: {line_art_path}...")
-                p.set(align='center')
                 line_art_image = Image.open(line_art_path)
+                
+                # Resize image to printer width (384 pixels for 58mm thermal printers)
+                # This reduces the amount of binary data sent, which may help with encoding issues
+                PRINTER_WIDTH = 384
+                if line_art_image.width > PRINTER_WIDTH:
+                    ratio = PRINTER_WIDTH / line_art_image.width
+                    new_height = int(line_art_image.height * ratio)
+                    line_art_image = line_art_image.resize((PRINTER_WIDTH, new_height), Image.Resampling.LANCZOS)
+                    logging.info(f"  Resized line art to {PRINTER_WIDTH}x{new_height}")
+                
+                # Convert to 1-bit (black and white) for thermal printer
+                line_art_image = line_art_image.convert('1')
+                logging.info(f"  Converted to 1-bit mode")
+                
                 p.image(line_art_image)
                 p.text("\n")  # Add spacing after line art
                 logging.info("Line art printed successfully.")
@@ -926,8 +943,8 @@ def print_poem_on_thermal_printer(poem_text, qr_code_bytes=None, line_art_path=N
                 logging.error(f"Failed to print line art: {e}")
                 logging.info("Continuing with poem printing...")
 
-        # Set printer alignment and font - left aligned for poem text
-        p.set(align='left', font='a', height=1, width=1)
+        # Set printer alignment for poem
+        p.set(align='left', font='a')
 
         # Poem title might be here, if returned by Gemini with a title.
         # Ensure the entire poem_text is handled for both English and Chinese.
@@ -948,6 +965,17 @@ def print_poem_on_thermal_printer(poem_text, qr_code_bytes=None, line_art_path=N
                 p.set(align='center')
                 # Load image from bytes
                 qr_image = Image.open(io.BytesIO(qr_code_bytes))
+                
+                # Resize QR code to reasonable size for thermal printer
+                QR_SIZE = 200  # 200x200 pixels is readable and fast to print
+                if qr_image.width > QR_SIZE or qr_image.height > QR_SIZE:
+                    qr_image = qr_image.resize((QR_SIZE, QR_SIZE), Image.Resampling.LANCZOS)
+                    logging.info(f"  Resized QR code to {QR_SIZE}x{QR_SIZE}")
+                
+                # Convert to 1-bit (black and white) for thermal printer
+                qr_image = qr_image.convert('1')
+                logging.info(f"  Converted to 1-bit mode")
+                
                 # Print image
                 p.image(qr_image)
                 p.text("\nScan to view photo\n")
