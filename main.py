@@ -3,7 +3,6 @@ import os
 import time
 import base64
 import json
-import subprocess
 import picamera
 from PIL import Image
 from escpos.printer import Serial
@@ -12,6 +11,10 @@ import logging
 import requests
 from datetime import datetime
 import pytz
+import io
+from google import genai
+from google.genai import types
+
 
 # Try to load .env file if python-dotenv is available
 try:
@@ -118,8 +121,21 @@ if not API_KEY:
     logging.error(f"Error: GEMINI_API_KEY not found in .env file or .api_key file. Please set GEMINI_API_KEY in .env file.")
     sys.exit(1) # Exit the script if this critical key is missing.
 
-# Gemini API Endpoint URL for content generation.
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
+# Gemini API Model IDs
+POEM_MODEL_ID = "gemini-3-pro-preview"  # Model for text/poem generation
+LINE_ART_MODEL_ID = "gemini-3-pro-image-preview"  # Model for image generation
+
+# Line art generation prompt
+LINE_ART_PROMPT = """
+Turn the provided image into a purely monochromatic line art illustration based on geometric minimalism.
+
+Requirements:
+1. STRICTLY Black lines on a White background only.
+2. NO shading, NO greyscale, NO gradients.
+3. Use clean, continuous contour lines to define the subjects and background.
+4. Maintain the recognizable features of the people and objects but simplify them into a graphic style.
+5. The style should resemble a clean coloring book page.
+"""
 # Prompt string for instructing Gemini to generate a poem based on an image.
 # Note: Style information will be added separately via build_prompt_with_style()
 # PRIMARY GOAL: Generate high-quality, artistic poetry that deeply captures the essence of the image.
@@ -199,6 +215,10 @@ GPIO.setup(LED_PIN, GPIO.OUT)
 # --- Global variable for software debounce ---
 last_poetry_action_time = 0
 COOLDOWN_TIME_SECONDS = 15 # Cooldown period to prevent multiple triggers from a single button press.
+
+# --- Global Config Variables ---
+SKIP_PRINTING = False # Flag to skip actual printing for debugging
+
 
 # --- Function to Take a Picture ---
 def take_picture(filename="image.jpg"):
@@ -395,11 +415,10 @@ def build_prompt_with_style(base_prompt, english_style=None, chinese_style=None)
     return prompt
 
 
-# --- Function to Generate Poem with Gemini via curl ---
-def generate_poem_from_image_via_curl(image_path, api_key):
+# --- Function to Generate Poem with Gemini using genai library ---
+def generate_poem_from_image(image_path, api_key):
     """
-    Sends an image to the Google Gemini API via a curl subprocess to generate a poem.
-    The image is base64-encoded and sent as part of a JSON payload.
+    Sends an image to the Google Gemini API using genai library to generate a poem.
     
     Returns:
         tuple: (poem_text, log_info_dict) or (None, None) if failed
@@ -463,55 +482,28 @@ def generate_poem_from_image_via_curl(image_path, api_key):
     logging.info("=" * 80)
     
     try:
-        logging.info(f"Reading image and encoding for Gemini...")
-        with open(image_path, "rb") as image_file:
-            encoded_image = base64.b64encode(image_file.read()).decode('utf-8') # Encode image to base64 string.
-
-        # Construct the JSON payload required by the Gemini API for image and text input.
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt}, # The text prompt for the poem generation (with style).
-                        {
-                            "inline_data": {
-                                "mime_type": "image/jpeg", # Specify the MIME type of the image.
-                                "data": encoded_image        # The base64 encoded image data.
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-
-        # Construct the curl command as a list of arguments.
-        curl_command = [
-            "curl",
-            "-X", "POST",
-            "-H", "Content-Type: application/json",
-            "--data", "@-", # Instruct curl to read request body from stdin.
-            f"{GEMINI_API_URL}?key={api_key}" # Append the API key to the endpoint URL.
-        ]
-        logging.info(f"Sending request to Gemini via curl...")
-
-        # Execute the curl command as a subprocess.
-        process = subprocess.run(
-            curl_command,
-            input=json.dumps(payload), # Pass the JSON payload as stdin to curl.
-            capture_output=True,       # Capture stdout and stderr of the curl command.
-            text=True,                 # Decode stdout/stderr as text (UTF-8 by default).
-            check=True                 # Raise a CalledProcessError if curl returns a non-zero exit code.
+        logging.info(f"Loading image for Gemini...")
+        # Load image using PIL
+        image = Image.open(image_path)
+        
+        logging.info(f"Sending request to Gemini API using genai library...")
+        
+        # Create Gemini client
+        client = genai.Client(api_key=api_key)
+        
+        # Call Gemini API for poem generation
+        response = client.models.generate_content(
+            model=POEM_MODEL_ID,
+            contents=[prompt, image]
         )
-
-        response_json = json.loads(process.stdout) # Parse the JSON response from Gemini.
-
-        # Extract the generated poem from the API response structure.
-        if 'candidates' in response_json and response_json['candidates']:
-            first_candidate = response_json['candidates'][0]
-            if 'content' in first_candidate and 'parts' in first_candidate['content']:
-                for part in first_candidate['content']['parts']:
-                    if 'text' in part:
-                        poem = part['text']
+        
+        # Extract the generated poem from the API response
+        if response.candidates and len(response.candidates) > 0:
+            first_candidate = response.candidates[0]
+            if first_candidate.content and first_candidate.content.parts:
+                for part in first_candidate.content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        poem = part.text
                         
                         # Remove introductory explanation text if present
                         # Find the first occurrence of poem title marker (~~~)
@@ -604,39 +596,106 @@ def generate_poem_from_image_via_curl(image_path, api_key):
                         
                         log_info['poem'] = poem  # Update log_info with processed poem (including style info)
                         return poem, log_info
-            elif 'safetyRatings' in first_candidate:
-                # Log a warning if the response was blocked by Gemini's safety settings.
+            
+            # Check for safety ratings
+            if hasattr(first_candidate, 'safety_ratings') and first_candidate.safety_ratings:
                 logging.warning("Warning: Response blocked by safety settings.")
-                for rating in first_candidate['safetyRatings']:
-                    logging.warning(f"  {rating['category']}: {rating['probability']}")
+                for rating in first_candidate.safety_ratings:
+                    logging.warning(f"  {rating.category}: {rating.probability}")
                 return None, None
-        if 'error' in response_json:
-            # Log specific API errors returned by Gemini.
-            logging.error(f"API Error: {response_json['error']['message']}")
-            return None, None
-
+        
         # Log if the expected poem content was not found in the response or if the format was unexpected.
         logging.error("Error: Could not find poem in Gemini response or unexpected response format.")
-        logging.error(f"Full response: {response_json}")
+        logging.error(f"Full response: {response}")
         return None, None
-    except subprocess.CalledProcessError as e:
-        # Log errors specifically from the curl command execution (e.g., network issues, invalid URL).
-        logging.error(f"Error executing curl command: {e}")
-        logging.error(f"Curl stdout: {e.stdout}")
-        logging.error(f"Curl stderr: {e.stderr}")
-        return None, None
-    except json.JSONDecodeError as e:
-        # Log errors that occur during JSON parsing of the Gemini response.
-        logging.error(f"Error parsing Gemini response JSON: {e}")
-        logging.error(f"Raw response: {process.stdout if 'process' in locals() else 'N/A'}")
-        return None, None
+        
     except Exception as e:
-        # Catch any other unexpected errors that might occur during the Gemini API call process.
+        # Catch any unexpected errors that might occur during the Gemini API call process.
         logging.error(f"An unexpected error occurred during Gemini API call: {e}")
+        import traceback
+        logging.error(traceback.format_exc())
         return None, None
 
+# --- Function to Generate Line Art from Image ---
+def generate_line_art_from_image(image_path, api_key):
+    """
+    Uses Gemini API to generate geometric line art from a photo.
+    This is an optional feature - if it fails, the system continues without it.
+    
+    Args:
+        image_path: Path to the original photo
+        api_key: Gemini API key
+    
+    Returns:
+        str: Path to the saved line art image, or None if generation failed
+    """
+    if not os.path.exists(image_path):
+        logging.error(f"Error: Image file not found at {image_path}")
+        return None
+    if not api_key:
+        logging.error("Error: Gemini API Key is not set or loaded")
+        return None
+    
+    try:
+        logging.info("=" * 80)
+        logging.info("GENERATING LINE ART:")
+        logging.info(f"  Input image: {image_path}")
+        logging.info(f"  Model: {LINE_ART_MODEL_ID}")
+        logging.info("-" * 80)
+        
+        # Load original image
+        image = Image.open(image_path)
+        logging.info(f"  Image loaded: {image.size} pixels")
+        
+        # Create Gemini client
+        client = genai.Client(api_key=api_key)
+        
+        # Call Gemini API for image generation (line art)
+        logging.info("  Sending request to Gemini for line art generation...")
+        response = client.models.generate_content(
+            model=LINE_ART_MODEL_ID,
+            contents=[LINE_ART_PROMPT, image],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"]
+            )
+        )
+        
+        # Extract image data from response
+        if response.candidates and len(response.candidates) > 0:
+            first_candidate = response.candidates[0]
+            if first_candidate.content and first_candidate.content.parts:
+                for part in first_candidate.content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data:
+                        # Decode image data
+                        image_bytes = part.inline_data.data
+                        generated_image = Image.open(io.BytesIO(image_bytes))
+                        
+                        # Generate output path (same directory as original, with _lineart suffix)
+                        base_name = os.path.splitext(os.path.basename(image_path))[0]
+                        output_dir = os.path.dirname(image_path)
+                        output_path = os.path.join(output_dir, f"{base_name}_lineart.png")
+                        
+                        # Save line art
+                        generated_image.save(output_path)
+                        logging.info(f"  ✓ Line art generated successfully!")
+                        logging.info(f"  Saved to: {output_path}")
+                        logging.info(f"  Size: {generated_image.size} pixels")
+                        logging.info("=" * 80)
+                        return output_path
+        
+        logging.warning("  ✗ No image data found in API response")
+        logging.warning("  Continuing without line art (non-critical feature)")
+        logging.info("=" * 80)
+        return None
+        
+    except Exception as e:
+        logging.warning(f"  ✗ Line art generation failed (non-critical): {str(e)}")
+        logging.warning("  Continuing without line art")
+        logging.info("=" * 80)
+        return None
+
 # --- Function to Upload Poem to Web App ---
-def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
+def upload_poem_to_webapp(image_path, poem_text, camera_logs=None, line_art_path=None):
     """
     上传照片和诗歌到 Web 应用（可选功能，失败不影响打印）
     
@@ -647,17 +706,18 @@ def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
         image_path: 照片文件路径
         poem_text: 生成的诗歌文本
         camera_logs: 相机端的日志信息（可选），用于同步到服务器端日志
+        line_art_path: 线条画文件路径（可选）
     
     Returns:
-        bool: 上传成功返回 True，失败返回 False（但不抛出异常）
+        tuple: (success: bool, qr_code_bytes: bytes or None)
     """
     if not WEB_APP_API_KEY:
         logging.info("Web app API key not configured. Skipping upload (non-critical).")
-        return False
+        return False, None
     
     if not os.path.exists(image_path):
         logging.warning(f"Image file not found at {image_path}. Skipping upload (non-critical).")
-        return False
+        return False, None
     
     try:
         logging.info("Attempting to upload poem to web app (optional backup)...")
@@ -671,6 +731,18 @@ def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
             "poem": poem_text,
             "image": image_data
         }
+        
+        # 如果有线条画，一起上传
+        if line_art_path and os.path.exists(line_art_path):
+            logging.info(f"  Including line art in upload: {line_art_path}")
+            with open(line_art_path, 'rb') as f:
+                line_art_data = base64.b64encode(f.read()).decode('utf-8')
+                payload["line_art"] = line_art_data
+        else:
+            if line_art_path:
+                logging.warning(f"  Line art path provided but file not found: {line_art_path}")
+            else:
+                logging.info("  No line art to upload")
         
         # 如果提供了相机端日志，一起上传
         if camera_logs:
@@ -691,22 +763,33 @@ def upload_poem_to_webapp(image_path, poem_text, camera_logs=None):
         
         if response.status_code == 201:
             logging.info("Poem uploaded successfully to web app!")
+            
+            # Extract QR code if available
+            response_data = response.json()
+            qr_code_bytes = None
+            if 'qr_code' in response_data and response_data['qr_code']:
+                try:
+                    qr_code_bytes = base64.b64decode(response_data['qr_code'])
+                    logging.info("QR code received and decoded successfully")
+                except Exception as e:
+                    logging.warning(f"Failed to decode QR code: {e}")
+            
             # Send heartbeat after successful upload to update camera online status
             send_camera_heartbeat()
-            return True
+            return True, qr_code_bytes
         else:
             logging.warning(f"Failed to upload poem to web app (non-critical): {response.status_code} - {response.text}")
-            return False
+            return False, None
     
     except requests.exceptions.Timeout:
-        logging.warning("Timeout while uploading to web app (non-critical). Server may be slow or unreachable. Poem was already printed successfully.")
-        return False
+        logging.warning("Timeout while uploading to web app (non-critical). Server may be slow or unreachable. Poem will be printed without QR code.")
+        return False, None
     except requests.exceptions.ConnectionError:
-        logging.warning("Connection error while uploading to web app (non-critical). Check internet connection. Poem was already printed successfully.")
-        return False
+        logging.warning("Connection error while uploading to web app (non-critical). Check internet connection. Poem will be printed without QR code.")
+        return False, None
     except Exception as e:
-        logging.warning(f"Unexpected error uploading to web app (non-critical): {str(e)}. Poem was already printed successfully.")
-        return False
+        logging.warning(f"Unexpected error uploading to web app (non-critical): {str(e)}. Poem will be printed without QR code.")
+        return False, None
 
 
 def send_camera_heartbeat():
@@ -791,13 +874,24 @@ def send_camera_heartbeat():
 
 
 # --- Function to Print Poem on Thermal Printer ---
-def print_poem_on_thermal_printer(poem_text):
+def print_poem_on_thermal_printer(poem_text, qr_code_bytes=None, line_art_path=None):
     """
     Prints the given poem text on the thermal printer connected via serial port.
     Handles potential printer connection and printing errors.
+    
+    Args:
+        poem_text: The poem text to print
+        qr_code_bytes: Optional QR code image bytes to print after the poem
+        line_art_path: Optional path to line art image to print before the poem
     """
     if not poem_text:
         logging.warning("No poem text to print.")
+        return
+
+    if SKIP_PRINTING:
+        logging.info("SKIP_PRINTING flag is set. Skipping actual thermal printing.")
+        logging.info("Poem would have been printed similarly to:")
+        logging.info(poem_text)
         return
     try:
         logging.info("Adding a small delay before attempting to open serial port...")
@@ -819,6 +913,19 @@ def print_poem_on_thermal_printer(poem_text):
         )
         logging.info(f"Attempting to connect to printer on port {SERIAL_PORT} with baud rate {BAUD_RATE} for printing poem...")
 
+        # Print line art if available
+        if line_art_path and os.path.exists(line_art_path):
+            try:
+                logging.info(f"Printing line art: {line_art_path}...")
+                p.set(align='center')
+                line_art_image = Image.open(line_art_path)
+                p.image(line_art_image)
+                p.text("\n")  # Add spacing after line art
+                logging.info("Line art printed successfully.")
+            except Exception as e:
+                logging.error(f"Failed to print line art: {e}")
+                logging.info("Continuing with poem printing...")
+
         # Set printer alignment and font - left aligned for poem text
         p.set(align='left', font='a', height=1, width=1)
 
@@ -829,9 +936,25 @@ def print_poem_on_thermal_printer(poem_text):
             p.text(line + '\n')
 
         # Add a footer text.
+        # Add a footer text.
         p.text("\n----------------------\n")
         # p.set(align='center')
         # p.text("（老赵的脚印）\n") # Example Chinese line in footer for testing
+        
+        # Print QR Code if available
+        if qr_code_bytes:
+            try:
+                logging.info("Printing QR code...")
+                p.set(align='center')
+                # Load image from bytes
+                qr_image = Image.open(io.BytesIO(qr_code_bytes))
+                # Print image
+                p.image(qr_image)
+                p.text("\nScan to view photo\n")
+                logging.info("QR code printed.")
+            except Exception as e:
+                logging.error(f"Failed to print QR code: {e}")
+        
         p.cut() # Send command to cut the paper.
         logging.info("Poem printed successfully!")
     except Exception as e:
@@ -893,15 +1016,25 @@ def run_poetry_printer(channel):
         captured_filepath = take_picture(picture_name)
 
         if captured_filepath:
-            # 2. If picture was taken successfully, generate a poem using Gemini.
-            poem, log_info = generate_poem_from_image_via_curl(captured_filepath, API_KEY)
+            # 2. Generate line art from the captured photo (optional feature)
+            line_art_filepath = None
+            try:
+                logging.info("Generating line art from captured photo...")
+                line_art_filepath = generate_line_art_from_image(captured_filepath, API_KEY)
+                if line_art_filepath:
+                    logging.info(f"Line art generation successful: {line_art_filepath}")
+                else:
+                    logging.info("Line art generation skipped or failed (continuing without it)")
+            except Exception as e:
+                logging.warning(f"Line art generation error (non-critical): {str(e)}")
+                logging.info("Continuing without line art")
+            
+            # 3. Generate poem using Gemini
+            poem, log_info = generate_poem_from_image(captured_filepath, API_KEY)
 
             if poem:
-                # Print the poem
-                print_poem_on_thermal_printer(poem)
-                
-                # 4. Upload to web app (if configured) - this is optional and should not block printing
-                # Even if upload fails, the poem has already been printed successfully
+                # 4. Upload to web app (if configured) first to get QR code
+                qr_code_bytes = None
                 if WEB_APP_API_KEY:
                     try:
                         # Prepare camera logs for server sync
@@ -911,12 +1044,22 @@ def run_poetry_printer(channel):
                             'prompt': log_info.get('prompt') if log_info else None,
                             'generated_poem': poem
                         }
-                        upload_poem_to_webapp(captured_filepath, poem, camera_logs=camera_logs)
+                        # Now upload returns success flag AND qr_code_bytes
+                        # Also pass line_art_filepath if available
+                        success, qr_code_bytes = upload_poem_to_webapp(
+                            captured_filepath, 
+                            poem, 
+                            camera_logs=camera_logs,
+                            line_art_path=line_art_filepath
+                        )
                     except Exception as e:
-                        # Log error but don't fail - printing was already successful
+                        # Log error but don't fail - we will still print
                         logging.warning(f"Failed to upload to web app (non-critical): {str(e)}")
                 else:
                     logging.info("Web app upload skipped (API key not configured)")
+
+                # 5. Print the poem (with line art if available, and QR code if available)
+                print_poem_on_thermal_printer(poem, qr_code_bytes, line_art_filepath)
             else:
                 logging.error("Poem generation failed, cannot print.")
         else:
@@ -936,6 +1079,8 @@ def run_poetry_printer(channel):
 if __name__ == "__main__":
     # Variable to store the previous button state to detect changes for console output (debugging).
     last_displayed_button_state = None
+
+
 
     try:
         # Initial setup: turn on the LED and log the ready message.
