@@ -3,13 +3,17 @@
 
 # Camera and hardware
 picamera
-Pillow
 python-escpos
+Pillow
 RPi.GPIO
-pyserial
+requests
+pytz
+python-dotenv
+qrcode[pil]
+google-genai
 
 # Web app upload (required for upload functionality)
-requests
+
 
 # Environment variable loading (optional but recommended)
 # If not installed, .env file will be parsed manually
